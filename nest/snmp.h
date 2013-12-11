@@ -79,8 +79,8 @@ typedef struct _snmp_registration
 	void *user_data;
 } snmp_registration;
 
-void snmp_register(const snmp_registration *registration);
-void snmp_unregister(const snmp_registration *registration);
+void snmp_register(snmp_registration *registration);
+void snmp_unregister(snmp_registration *registration);
 void snmp_notify(const u32 *oid, unsigned int oid_size, const list *varbinds);
 
 typedef struct _snmp_protocol snmp_protocol;
@@ -94,10 +94,17 @@ struct _snmp_protocol
 	void *user_data;
 };
 
-void snmp_init_protocols(void);
+void snmp_init(void);
+
 void snmp_add_protocol(snmp_protocol *protocol);
 void snmp_remove_protocol(snmp_protocol *protocol);
 
-extern list snmp_protocols;
+struct snmp_global
+{
+	list protocols;
+	list registrations;
+};
+
+extern struct snmp_global snmp_global;
 
 #endif /* _BIRD_NSNMP_H_ */

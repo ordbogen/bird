@@ -2,16 +2,17 @@
 
 #include <string.h>
 
-list snmp_protocols;
+struct snmp_global snmp_global;
 
-void snmp_init_protocols(void)
+void snmp_init(void)
 {
-	init_list(&snmp_protocols);
+	init_list(&snmp_global.protocols);
+	init_list(&snmp_global.registrations);
 }
 
 void snmp_add_protocol(snmp_protocol *protocol)
 {
-	add_tail(&snmp_protocols, &protocol->n);
+	add_tail(&snmp_global.protocols, &protocol->n);
 }
 
 void snmp_remove_protocol(snmp_protocol *protocol)
@@ -19,19 +20,25 @@ void snmp_remove_protocol(snmp_protocol *protocol)
 	rem_node(&protocol->n);
 }
 
-void snmp_register(const snmp_registration *registration)
+void snmp_register(snmp_registration *registration)
 {
 	snmp_protocol *protocol;
-	WALK_LIST(protocol, snmp_protocols)
+
+	add_tail(&snmp_global.registrations, &registration->n);
+
+	WALK_LIST(protocol, snmp_global.protocols)
 	{
 		protocol->register_hook(protocol, registration, protocol->user_data);
 	}
 }
 
-void snmp_unregister(const snmp_registration *registration)
+void snmp_unregister(snmp_registration *registration)
 {
 	snmp_protocol *protocol;
-	WALK_LIST(protocol, snmp_protocols)
+
+	rem_node(&registration->n);
+
+	WALK_LIST(protocol, snmp_global.protocols)
 	{
 		protocol->unregister_hook(protocol, registration, protocol->user_data);
 	}
@@ -40,7 +47,7 @@ void snmp_unregister(const snmp_registration *registration)
 void snmp_notify(const u32 *oid, unsigned int oid_size, const list *varbinds)
 {
 	snmp_protocol *protocol;
-	WALK_LIST(protocol, snmp_protocols)
+	WALK_LIST(protocol, snmp_global.protocols)
 	{
 		protocol->notify_hook(protocol, oid, oid_size, varbinds, protocol->user_data);
 	}
