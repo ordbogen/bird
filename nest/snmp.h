@@ -66,6 +66,8 @@ snmp_varbind *snmp_varbind_new_counter32(pool *p, const u32 *oid, unsigned int o
 snmp_varbind *snmp_varbind_new_gauge32(pool *p, const u32 *oid, unsigned int oid_size, int copy_oid, u32 value);
 snmp_varbind *snmp_varbind_new_time_ticks(pool *p, const u32 *oid, unsigned int oid_size, int copy_oid, u32 value);
 snmp_varbind *snmp_varbind_new_counter64(pool *p, const u32 *oid, unsigned int oid_size, int copy_oid, u64 value);
+snmp_varbind *snmp_varbind_new_no_such_object(pool *p, const u32 *oid, unsigned int oid_size, int copy_oid);
+snmp_varbind *snmp_varbind_new_no_such_instance(pool *p, const u32 *oid, unsigned int oid_size, int copy_oid);
 snmp_varbind *snmp_varbind_copy(pool *p, const snmp_varbind *varbind); 
 void snmp_varbind_free(snmp_varbind *varbind);
 

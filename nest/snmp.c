@@ -158,6 +158,16 @@ snmp_varbind *snmp_varbind_new_counter64(pool *p, const u32 *oid, unsigned int o
 	return varbind;
 }
 
+snmp_varbind *snmp_varbind_new_no_such_object(pool *p, const u32 *oid, unsigned int oid_size, int copy_oid)
+{
+	return snmp_varbind_allocate(p, oid, oid_size, copy_oid, SNMP_TYPE_NO_SUCH_OBJECT, 0);
+}
+
+snmp_varbind *snmp_varbind_new_no_such_instance(pool *p, const u32 *oid, unsigned int oid_size, int copy_oid)
+{
+	return snmp_varbind_allocate(p, oid, oid_size, copy_oid, SNMP_TYPE_NO_SUCH_INSTANCE, 0);
+}
+
 snmp_varbind *snmp_varbind_copy(pool *p, const snmp_varbind *varbind)
 {
 	switch ((snmp_varbind_type)varbind->type)
