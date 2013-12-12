@@ -90,9 +90,9 @@ typedef struct _snmp_protocol snmp_protocol;
 struct _snmp_protocol
 {
 	node n; /* For the snmp_protocols list */
-	void (*register_hook)(snmp_protocol *p, const snmp_registration *registration, void *user_data);
-	void (*unregister_hook)(snmp_protocol *p, const snmp_registration *registration, void *user_data);
-	void (*notify_hook)(snmp_protocol *p, const u32 *oid, unsigned int oid_size, const list *varbinds, void *user_data);
+	void (*register_hook)(snmp_protocol *p, const snmp_registration *registration);
+	void (*unregister_hook)(snmp_protocol *p, const snmp_registration *registration);
+	void (*notify_hook)(snmp_protocol *p, const u32 *oid, unsigned int oid_size, const list *varbinds);
 	void *user_data;
 };
 

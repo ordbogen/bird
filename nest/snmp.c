@@ -28,7 +28,7 @@ void snmp_register(snmp_registration *registration)
 
 	WALK_LIST(protocol, snmp_global.protocols)
 	{
-		protocol->register_hook(protocol, registration, protocol->user_data);
+		protocol->register_hook(protocol, registration);
 	}
 }
 
@@ -40,7 +40,7 @@ void snmp_unregister(snmp_registration *registration)
 
 	WALK_LIST(protocol, snmp_global.protocols)
 	{
-		protocol->unregister_hook(protocol, registration, protocol->user_data);
+		protocol->unregister_hook(protocol, registration);
 	}
 }
 
@@ -49,7 +49,7 @@ void snmp_notify(const u32 *oid, unsigned int oid_size, const list *varbinds)
 	snmp_protocol *protocol;
 	WALK_LIST(protocol, snmp_global.protocols)
 	{
-		protocol->notify_hook(protocol, oid, oid_size, varbinds, protocol->user_data);
+		protocol->notify_hook(protocol, oid, oid_size, varbinds);
 	}
 }
 
