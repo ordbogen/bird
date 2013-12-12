@@ -31,6 +31,7 @@
 #include "nest/iface.h"
 #include "nest/cli.h"
 #include "nest/locks.h"
+#include "nest/snmp.h"
 #include "conf/conf.h"
 #include "filter/filter.h"
 
@@ -754,6 +755,7 @@ main(int argc, char **argv)
   if_init();
   roa_init();
   config_init();
+  snmp_init();
 
   uid_t use_uid = get_uid(use_user);
   gid_t use_gid = get_gid(use_group);
