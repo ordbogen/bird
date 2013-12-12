@@ -76,7 +76,7 @@ typedef struct _snmp_registration
 	node n; /* necessary for registration lists */
 	const u32 *oid;
 	unsigned int oid_size;
-	snmp_varbind *(*get_hook)(const u32 *oid, unsigned int oid_size, void *user_data);
+	snmp_varbind *(*get_hook)(const u32 *oid, unsigned int oid_size, const u32 *sub_oid, unsigned int sub_oid_size, void *user_data);
 	unsigned int (*get_next_hook)(u32 *oid, unsigned int oid_size, void *user_data); /* oid will contain the current object-id. The hook should replace the oid with the next oid (oid is guaranteed to have room for 128 sub ids) and then return the size. If the end is reached, 0 is returned */
 	void *user_data;
 } snmp_registration;
