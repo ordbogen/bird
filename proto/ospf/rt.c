@@ -278,7 +278,7 @@ ri_install_net(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
   if (ri_better(po, new, &old->n))
     memcpy(&old->n, new, sizeof(orta));
-  else if (ri_equal_cost(&old->n, new) && old->n.nhs && new->nhs)
+  else if (po->ecmp && ri_equal_cost(&old->n, new) && old->n.nhs && new->nhs)
   {
     DBG("Adding gateway %R to existing route %R/%i\n",
 	new->nhs->gw,
@@ -311,7 +311,7 @@ ri_install_ext(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
   if (ri_better_ext(po, new, &old->n))
     memcpy(&old->n, new, sizeof(orta));
-  else if (ri_equal_cost(&old->n, new) && old->n.nhs && new->nhs)
+  else if (po->ecmp && ri_equal_cost(&old->n, new) && old->n.nhs && new->nhs)
   {
     DBG("Adding gateway %R to existing external route %R/%i\n",
 	new->nhs->gw,
