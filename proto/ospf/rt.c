@@ -125,7 +125,7 @@ static int
 ri_equal_cost(const orta *old, const orta *new)
 {
   /* 16.8. - Each one of the multiple routes will be of the same type, cost, and will have the same associated area */
-  if (old->type == new->type && old->metric1 == new->metric1 && old->metric1 == new->metric2 && old->oa == new->oa)
+  if (old->type == new->type && old->metric1 == new->metric1 && old->metric2 == new->metric2 && old->oa == new->oa)
     return 1;
   else
     return 0;
