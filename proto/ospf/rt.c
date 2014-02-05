@@ -66,6 +66,70 @@ copy_nexthop(struct proto_ospf *po, struct mpnh *src)
   return nh;
 }
 
+static struct mpnh *
+add_nexthops(struct proto_ospf *po, struct mpnh *old, struct mpnh *new)
+{
+  struct mpnh *ret = old;
+  struct mpnh **pnh = &ret;
+
+  if (old == NULL)
+    return NULL;
+
+  /* TODO - Handle ecmp route limit */
+
+  while (new != NULL)
+  {
+    struct mpnh *nh = *pnh;
+    if (nh == NULL)
+    {
+      /* Add next hop to end of list */
+      nh = copy_nexthop(po, new);
+      *pnh = nh;
+      pnh = &nh->next;
+
+      new = new->next;
+    }
+    else
+    {
+      int cmp = cmp_nhs(nh, new);
+      if (cmp < 0)
+      {
+	/* Continue to next nexthop */
+	pnh = &nh->next;
+      }
+      else if (cmp > 0)
+      {
+	/* Add nexthop before current nexthop */
+	struct mpnh *next = copy_nexthop(po, new);
+	next->next = nh;
+
+	*pnh = next;
+	pnh = &next->next;
+
+	new = new->next;
+      }
+      else /* if (cmp == 0) */
+      {
+	/* Do not add identical route */
+	new = new->next;
+	pnh = &nh->next;
+      }
+    }
+  }
+
+  return ret;
+}
+
+/* If new is equal in cost to old return 1 */
+static int
+ri_equal_cost(const orta *old, const orta *new)
+{
+  /* 16.8. - Each one of the multiple routes will be of the same type, cost, and will have the same associated area */
+  if (old->type == new->type && old->metric1 == new->metric1 && old->metric1 == new->metric2 && old->oa == new->oa)
+    return 1;
+  else
+    return 0;
+}
 
 /* If new is better return 1 */
 static int
@@ -214,50 +278,13 @@ ri_install_net(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
   if (ri_better(po, new, &old->n))
     memcpy(&old->n, new, sizeof(orta));
-  else if (po->ecmp != 0
-      && new->metric1 == old->n.metric1
-      && new->nhs != NULL && new->nhs->iface != NULL && ipa_nonzero(new->nhs->gw)
-      && old->n.nhs != NULL && old->n.nhs->iface != NULL && ipa_nonzero(old->n.nhs->gw))
+  else if (ri_equal_cost(&old->n, new) && old->n.nhs && new->nhs)
   {
-    DBG("Adding gateway %R to existing route to %R/%i (%R)\n",
+    DBG("Adding gateway %R to existing route %R/%i\n",
 	new->nhs->gw,
 	prefix,
-	pxlen,
-	old->n.nhs->gw);
-
-    struct mpnh **pnh = &old->n.nhs;
-    for (;;)
-    {
-      struct mpnh *nh = *pnh;
-      if (nh == NULL)
-      {
-	/* Add next hop to end of list */
-	*pnh = copy_nexthop(po, new->nhs);
-	break;
-      }
-      else
-      {
-	int cmp = cmp_nhs(nh, new->nhs);
-	if (cmp < 0)
-	{
-	  /* Continue to next nexthop */
-	  pnh = &nh->next;
-	}
-	else if (cmp == 0)
-	{
-	  /* Do not add identical route */
-	  break;
-	}
-	else /* if (cmp > 0) */
-	{
-	  /* Add nexthop before current nexthop */
-	  struct mpnh *next = copy_nexthop(po, new->nhs);
-	  *pnh = next;
-	  next->next = nh;
-	  break;
-	}
-      }
-    }
+	pxlen);
+    old->n.nhs = add_nexthops(po, old->n.nhs, new->nhs);
   }
 }
 
@@ -284,6 +311,14 @@ ri_install_ext(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
   if (ri_better_ext(po, new, &old->n))
     memcpy(&old->n, new, sizeof(orta));
+  else if (ri_equal_cost(&old->n, new) && old->n.nhs && new->nhs)
+  {
+    DBG("Adding gateway %R to existing external route %R/%i\n",
+	new->nhs->gw,
+	prefix,
+	pxlen);
+    old->n.nhs = add_nexthops(po, old->n.nhs, new->nhs);
+  }
 }
 
 static inline struct ospf_iface *
