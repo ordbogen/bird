@@ -12,6 +12,8 @@ static void add_cand(list * l, struct top_hash_entry *en,
 		     struct top_hash_entry *par, u32 dist,
 		     struct ospf_area *oa, int i);
 static void rt_sync(struct proto_ospf *po);
+static int
+cmp_nhs(struct mpnh *s1, struct mpnh *s2);
 
 /* In ospf_area->rtr we store paths to routers, but we use RID (and not IP address)
    as index, so we need to encapsulate RID to IP address */
@@ -212,6 +214,51 @@ ri_install_net(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
   if (ri_better(po, new, &old->n))
     memcpy(&old->n, new, sizeof(orta));
+  else if (po->ecmp != 0
+      && new->metric1 == old->n.metric1
+      && new->nhs != NULL && new->nhs->iface != NULL && ipa_nonzero(new->nhs->gw)
+      && old->n.nhs != NULL && old->n.nhs->iface != NULL && ipa_nonzero(old->n.nhs->gw))
+  {
+    DBG("Adding gateway %R to existing route to %R/%i (%R)\n",
+	new->nhs->gw,
+	prefix,
+	pxlen,
+	old->n.nhs->gw);
+
+    struct mpnh **pnh = &old->n.nhs;
+    for (;;)
+    {
+      struct mpnh *nh = *pnh;
+      if (nh == NULL)
+      {
+	/* Add next hop to end of list */
+	*pnh = copy_nexthop(po, new->nhs);
+	break;
+      }
+      else
+      {
+	int cmp = cmp_nhs(nh, new->nhs);
+	if (cmp < 0)
+	{
+	  /* Continue to next nexthop */
+	  pnh = &nh->next;
+	}
+	else if (cmp == 0)
+	{
+	  /* Do not add identical route */
+	  break;
+	}
+	else /* if (cmp > 0) */
+	{
+	  /* Add nexthop before current nexthop */
+	  struct mpnh *next = copy_nexthop(po, new->nhs);
+	  *pnh = next;
+	  next->next = nh;
+	  break;
+	}
+      }
+    }
+  }
 }
 
 static inline void
