@@ -72,21 +72,20 @@ add_nexthops(struct proto_ospf *po, struct mpnh *old, struct mpnh *new)
   struct mpnh *ret = old;
   struct mpnh **pnh = &ret;
 
-  if (old == NULL)
-    return NULL;
+  if (old == NULL || new == NULL)
+    return old;
 
-  /* TODO - Handle ecmp route limit */
-
-  while (new != NULL)
+  int count = po->ecmp;
+  struct mpnh *nh;
+  while (new != NULL && count--)
   {
-    struct mpnh *nh = *pnh;
+    nh = *pnh;
     if (nh == NULL)
     {
       /* Add next hop to end of list */
-      nh = copy_nexthop(po, new);
-      *pnh = nh;
-      pnh = &nh->next;
+      *pnh = nh = copy_nexthop(po, new);
 
+      pnh = &nh->next;
       new = new->next;
     }
     else
@@ -100,22 +99,24 @@ add_nexthops(struct proto_ospf *po, struct mpnh *old, struct mpnh *new)
       else if (cmp > 0)
       {
 	/* Add nexthop before current nexthop */
-	struct mpnh *next = copy_nexthop(po, new);
+	struct mpnh *next;
+
+	*pnh = next = copy_nexthop(po, new);
 	next->next = nh;
 
-	*pnh = next;
 	pnh = &next->next;
-
 	new = new->next;
       }
       else /* if (cmp == 0) */
       {
 	/* Do not add identical route */
-	new = new->next;
 	pnh = &nh->next;
+	new = new->next;
       }
     }
   }
+
+  *pnh = NULL;
 
   return ret;
 }
