@@ -66,31 +66,30 @@ copy_nexthop(struct proto_ospf *po, struct mpnh *src)
   return nh;
 }
 
-static struct mpnh *
-add_nexthops(struct proto_ospf *po, struct mpnh *old, struct mpnh *new)
+static void
+add_nexthops(struct proto_ospf *po, struct orta *old, struct orta *new)
 {
-  struct mpnh *ret = old;
-  struct mpnh **pnh = &ret;
-
-  if (old == NULL || new == NULL)
-    return old;
+  struct mpnh **pnh = &old->nhs;
+  struct mpnh *newnh = new->nhs;
 
   int count = po->ecmp;
   struct mpnh *nh;
-  while (new != NULL && count--)
+  int added = 0;
+  while (newnh != NULL && count--)
   {
     nh = *pnh;
     if (nh == NULL)
     {
       /* Add next hop to end of list */
-      *pnh = nh = copy_nexthop(po, new);
+      *pnh = nh = copy_nexthop(po, newnh);
+      added = 1;
 
       pnh = &nh->next;
-      new = new->next;
+      newnh = newnh->next;
     }
     else
     {
-      int cmp = cmp_nhs(nh, new);
+      int cmp = cmp_nhs(nh, newnh);
       if (cmp < 0)
       {
 	/* Continue to next nexthop */
@@ -101,24 +100,32 @@ add_nexthops(struct proto_ospf *po, struct mpnh *old, struct mpnh *new)
 	/* Add nexthop before current nexthop */
 	struct mpnh *next;
 
-	*pnh = next = copy_nexthop(po, new);
+	*pnh = next = copy_nexthop(po, newnh);
+	added = 1;
+
 	next->next = nh;
 
 	pnh = &next->next;
-	new = new->next;
+	newnh = newnh->next;
       }
       else /* if (cmp == 0) */
       {
 	/* Do not add identical route */
 	pnh = &nh->next;
-	new = new->next;
+	newnh = newnh->next;
       }
     }
   }
 
   *pnh = NULL;
 
-  return ret;
+  if (added)
+  {
+    if (old->rid != new->rid)
+      old->rid = 0;
+    if (old->tag != new->tag)
+      old->tag = 0;
+  }
 }
 
 /* If new is equal in cost to old return 1 */
@@ -126,7 +133,11 @@ static int
 ri_equal_cost(const orta *old, const orta *new)
 {
   /* 16.8. - Each one of the multiple routes will be of the same type, cost, and will have the same associated area */
-  if (old->type == new->type && old->metric1 == new->metric1 && old->metric2 == new->metric2 && old->oa == new->oa)
+  if (old->type == new->type
+      && old->options == new->options
+      && old->metric1 == new->metric1
+      && old->metric2 == new->metric2
+      && old->oa == new->oa)
     return 1;
   else
     return 0;
@@ -285,7 +296,7 @@ ri_install_net(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
 	new->nhs->gw,
 	prefix,
 	pxlen);
-    old->n.nhs = add_nexthops(po, old->n.nhs, new->nhs);
+    add_nexthops(po, &old->n, new);
   }
 }
 
@@ -318,7 +329,7 @@ ri_install_ext(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
 	new->nhs->gw,
 	prefix,
 	pxlen);
-    old->n.nhs = add_nexthops(po, old->n.nhs, new->nhs);
+    add_nexthops(po, &old->n, new);
   }
 }
 
