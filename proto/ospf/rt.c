@@ -235,10 +235,10 @@ ri_compare_ext(const struct proto_ospf *po, const orta *old, const orta *new)
       return ret;
   }
 
-  /* 16.4. (6c) */
+  /* 16.4. (6c) - If not RFC1583, select preferred paths */
   if (!po->rfc1583)
   {
-    ret = (old->options & ORTA_PREF) - (new->options & ORTA_PREF);
+    ret = (new->options & ORTA_PREF) - (old->options & ORTA_PREF);
     if (ret != 0)
       return ret;
   }
