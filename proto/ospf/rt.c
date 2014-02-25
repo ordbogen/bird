@@ -56,7 +56,7 @@ new_nexthop(struct proto_ospf *po, ip_addr gw, struct iface *iface, unsigned cha
 }
 
 static inline struct mpnh *
-copy_nexthop(struct proto_ospf *po, struct mpnh *src)
+copy_nexthop(struct proto_ospf *po, const struct mpnh *src)
 {
   struct mpnh *nh = lp_alloc(po->nhpool, sizeof(struct mpnh));
   nh->gw = src->gw;
@@ -128,43 +128,29 @@ add_nexthops(struct proto_ospf *po, struct orta *old, struct orta *new)
   }
 }
 
-/* If new is equal in cost to old return 1 */
+/* Compare existing route with new intra-area or inter-area route
+   Returns:
+   < 0 if old is better.
+   = 0 if routes are equal (eligble for multipath)
+   > 1 if new is better.
+   */
 static int
-ri_equal_cost(const orta *old, const orta *new)
+ri_compare(const struct proto_ospf *po, const orta *old, const orta *new)
 {
-  /* 16.8. - Each one of the multiple routes will be of the same type, cost, and will have the same associated area */
-  if (old->type == new->type
-      && old->options == new->options
-      && old->metric1 == new->metric1
-      && old->metric2 == new->metric2
-      && old->oa == new->oa)
-    return 1;
-  else
-    return 0;
-}
+  int ret;
 
-/* If new is better return 1 */
-static int
-ri_better(struct proto_ospf *po, orta *new, orta *old)
-{
   if (old->type == RTS_DUMMY)
     return 1;
 
-  if (new->type < old->type)
-    return 1;
+  /* Prefer intra-area over inter-area over externals */
+  ret = old->type - new->type;
+  if (ret != 0)
+    return ret;
 
-  if (new->type > old->type)
-    return 0;
-
-  if (new->metric1 < old->metric1)
-    return 1;
-
-  if (new->metric1 > old->metric1)
-    return 0;
-
-  return 0;
+  /* Prefer lowest type 1 metric */
+  ret = old->metric1 - new->metric1;
+  return ret;
 }
-
 
 /* Whether the ASBR or the forward address destination is preferred
    in AS external route selection according to 16.4.1. */
@@ -207,9 +193,9 @@ ri_better_asbr(struct proto_ospf *po, orta *new, orta *old)
 }
 
 static int
-orta_prio(orta *nf)
+orta_prio(const orta *nf)
 {
-  /* RFC 3103 2.5 (6e) priorities */
+  /* RFC 3101, 2.5 (6e) priorities */
   u32 opts = nf->options & (ORTA_NSSA | ORTA_PROP);
 
   /* A Type-7 LSA with the P-bit set */
@@ -223,81 +209,68 @@ orta_prio(orta *nf)
   return 0;
 }
 
-/* 16.4. (6), return 1 if new is better */
+/* Compare existing route with new external type 1 or 2 route.
+   Returns:
+   < 0 if old route is better,
+   = 0 if routes are equal in cost (eligble for multipath)
+   > 0 if new route is better.
+   */
 static int
-ri_better_ext(struct proto_ospf *po, orta *new, orta *old)
+ri_compare_ext(const struct proto_ospf *po, const orta *old, const orta *new)
 {
+  int ret;
   if (old->type == RTS_DUMMY)
     return 1;
 
-  /* 16.4. (6a) */
-  if (new->type < old->type)
-    return 1;
+  /* 16.4. (6a) - Prefer intra-area over inter-area over type 1 external over type 2 external */
+  ret = old->type - new->type;
+  if (ret != 0)
+    return ret;
 
-  if (new->type > old->type)
-    return 0;
-
-  /* 16.4. (6b), same type */
+  /* 16.4. (6b) - If type 2, prefer route with lowest type 2 metric */
   if (new->type == RTS_OSPF_EXT2)
   {
-    if (new->metric2 < old->metric2)
-      return 1;
-
-    if (new->metric2 > old->metric2)
-      return 0;
+    ret = old->metric2 - new->metric2;
+    if (ret != 0)
+      return ret;
   }
 
   /* 16.4. (6c) */
   if (!po->rfc1583)
   {
-    u32 new_pref = new->options & ORTA_PREF;
-    u32 old_pref = old->options & ORTA_PREF;
-
-    if (new_pref > old_pref)
-      return 1;
-
-    if (new_pref < old_pref)
-      return 0;
+    ret = (old->options & ORTA_PREF) - (new->options & ORTA_PREF);
+    if (ret != 0)
+      return ret;
   }
 
-  /* 16.4. (6d) */
-  if (new->metric1 < old->metric1)
-    return 1;
+  /* 16.4. (6d) - Prefer the route with loest type 1 metric */
+  ret = old->metric1 - new->metric1;
+  if (ret != 0)
+    return ret;
 
-  if (new->metric1 > old->metric1)
+  /* RFC 3101, 2.5. (6e) - Prioritize Type-7 LSA with P-bit, then Type-5 LSA, then LSA with higher router ID */
+  ret = orta_prio(new) - orta_prio(old);
+  if (ret != 0)
+    return ret;
+
+  /* If multipath is enabled, don't do any more sorting */
+  if (po->ecmp)
     return 0;
 
-  /* RFC 3103, 2.5. (6e) */
-  int new_prio = orta_prio(new);
-  int old_prio = orta_prio(old);
-
-  if (new_prio > old_prio)
-    return 1;
-
-  if (old_prio > new_prio)
-    return 0;
-
-  /* make it more deterministic */
-  if (new->rid > old->rid)
-    return 1;
-
-  return 0;
+  /* Otherwise use largest router id as per RFC 3101, 2.5. (6e) */
+  ret = new->rid - old->rid;
+  return ret;
 }
 
 static inline void
 ri_install_net(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
 {
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
-  if (ri_better(po, new, &old->n))
+  int cmp = ri_compare(po, &old->n, new);
+  if (cmp > 0)
     memcpy(&old->n, new, sizeof(orta));
-  else if (po->ecmp && ri_equal_cost(&old->n, new) && old->n.nhs && new->nhs)
-  {
-    DBG("Adding gateway %R to existing route %R/%i\n",
-	new->nhs->gw,
-	prefix,
-	pxlen);
+  else if (cmp == 0 && po->ecmp)
     add_nexthops(po, &old->n, new);
-  }
 }
 
 static inline void
@@ -305,7 +278,7 @@ ri_install_rt(struct ospf_area *oa, u32 rid, orta *new)
 {
   ip_addr addr = ipa_from_rid(rid);
   ort *old = (ort *) fib_get(&oa->rtr, &addr, MAX_PREFIX_LENGTH);
-  if (ri_better(oa->po, new, &old->n))
+  if (ri_compare(oa->po, &old->n, new) > 0)
     memcpy(&old->n, new, sizeof(orta));
 }
 
@@ -321,16 +294,11 @@ static inline void
 ri_install_ext(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
 {
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
-  if (ri_better_ext(po, new, &old->n))
+  int cmp = ri_compare_ext(po, &old->n, new);
+  if (cmp > 0)
     memcpy(&old->n, new, sizeof(orta));
-  else if (po->ecmp && ri_equal_cost(&old->n, new) && old->n.nhs && new->nhs)
-  {
-    DBG("Adding gateway %R to existing external route %R/%i\n",
-	new->nhs->gw,
-	prefix,
-	pxlen);
+  else if (cmp == 0 && po->ecmp)
     add_nexthops(po, &old->n, new);
-  }
 }
 
 static inline struct ospf_iface *
