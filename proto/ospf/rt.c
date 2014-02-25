@@ -278,8 +278,11 @@ ri_install_rt(struct ospf_area *oa, u32 rid, orta *new)
 {
   ip_addr addr = ipa_from_rid(rid);
   ort *old = (ort *) fib_get(&oa->rtr, &addr, MAX_PREFIX_LENGTH);
-  if (ri_compare(oa->po, &old->n, new) > 0)
+  int cmp = ri_compare(oa->po, &old->n, new);
+  if (cmp > 0)
     memcpy(&old->n, new, sizeof(orta));
+  else if (cmp == 0 && po->ecmp)
+    add_nexthops(po, &old->n, new);
 }
 
 static inline void
