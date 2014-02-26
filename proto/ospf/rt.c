@@ -142,7 +142,7 @@ add_nexthops(struct proto_ospf *po, struct orta *old, const struct orta *new)
 /* Compare existing route with new intra-area or inter-area route
    Returns:
    < 0 if old is better.
-   = 0 if routes are equal (eligble for multipath)
+   = 0 if routes are equal (eligible for multipath)
    > 1 if new is better.
    */
 static int
@@ -223,7 +223,7 @@ orta_prio(const orta *nf)
 /* Compare existing route with new external type 1 or 2 route.
    Returns:
    < 0 if old route is better,
-   = 0 if routes are equal in cost (eligble for multipath)
+   = 0 if routes are equal (eligible for multipath)
    > 0 if new route is better.
    */
 static int
