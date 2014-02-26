@@ -281,8 +281,8 @@ ri_install_rt(struct ospf_area *oa, u32 rid, orta *new)
   int cmp = ri_compare(oa->po, &old->n, new);
   if (cmp > 0)
     memcpy(&old->n, new, sizeof(orta));
-  else if (cmp == 0 && po->ecmp)
-    add_nexthops(po, &old->n, new);
+  else if (cmp == 0 && oa->po->ecmp)
+    add_nexthops(oa->po, &old->n, new);
 }
 
 static inline void
