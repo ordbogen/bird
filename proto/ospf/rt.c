@@ -264,13 +264,14 @@ ri_compare_ext(const struct proto_ospf *po, const orta *old, const orta *new)
   if (ret != 0)
     return ret;
 
-  /* If multipath is enabled, don't do any more sorting */
-  if (po->ecmp)
-    return 0;
+  /* RFC 3101, 2.4 (2) - If the P-bit settings are the same, the LSA with higher router ID is preferred */
+  if (new->options & ORTA_NSSA)
+  {
+    ret = new->rid - old->rid;
+    return ret;
+  }
 
-  /* Otherwise use largest router id as per RFC 3101, 2.5. (6e) */
-  ret = new->rid - old->rid;
-  return ret;
+  return 0;
 }
 
 static inline void
