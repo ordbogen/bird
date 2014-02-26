@@ -67,22 +67,21 @@ copy_nexthop(struct proto_ospf *po, const struct mpnh *src)
 }
 
 static void
-add_nexthops(struct proto_ospf *po, struct orta *old, struct orta *new)
+add_nexthops(struct proto_ospf *po, struct orta *old, const struct orta *new)
 {
   struct mpnh **pnh = &old->nhs;
   struct mpnh *newnh = new->nhs;
 
   int count = po->ecmp;
-  struct mpnh *nh;
-  int added = 0;
-  while (newnh != NULL && count--)
+
+  /* Iterate through new next hops */
+  while (newnh != NULL && count)
   {
-    nh = *pnh;
+    struct mpnh *nh = *pnh;
     if (nh == NULL)
     {
       /* Add next hop to end of list */
       *pnh = nh = copy_nexthop(po, newnh);
-      added = 1;
 
       pnh = &nh->next;
       newnh = newnh->next;
@@ -101,7 +100,6 @@ add_nexthops(struct proto_ospf *po, struct orta *old, struct orta *new)
 	struct mpnh *next;
 
 	*pnh = next = copy_nexthop(po, newnh);
-	added = 1;
 
 	next->next = nh;
 
@@ -115,11 +113,24 @@ add_nexthops(struct proto_ospf *po, struct orta *old, struct orta *new)
 	newnh = newnh->next;
       }
     }
+
+    --count;
   }
 
+  /* Iterate through remaining old next hops */
+  while (*pnh != NULL && count)
+  {
+    struct mpnh *nh = *pnh;
+    pnh = &nh->next;
+
+    --count;
+  }
+
+  /* Terminate list to ensure that we adhere to the ecmp limit */
   *pnh = NULL;
 
-  if (added)
+  /* Potentially clear router id and tag if we have more than one route */
+  if (po->ecmp - count > 1)
   {
     if (old->rid != new->rid)
       old->rid = 0;
