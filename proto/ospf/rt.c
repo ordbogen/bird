@@ -254,7 +254,7 @@ ri_compare_ext(const struct proto_ospf *po, const orta *old, const orta *new)
       return ret;
   }
 
-  /* 16.4. (6d) - Prefer the route with loest type 1 metric */
+  /* 16.4. (6d) - Prefer the route with lowest type 1 metric */
   ret = old->metric1 - new->metric1;
   if (ret != 0)
     return ret;
