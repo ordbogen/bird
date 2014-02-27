@@ -132,8 +132,11 @@ add_nexthops(struct proto_ospf *po, struct orta *old, const struct orta *new)
   /* Potentially clear router id and tag if we have more than one route */
   if (po->ecmp - count > 1)
   {
-    if (old->rid != new->rid)
-      old->rid = 0;
+    /* RFC 3101 prefer highest router ID, so keep the highest router ID */
+    if (new->rid > old->rid)
+      old->rid = new->rid;
+
+    /* Meaning of tag is beyond the spec of OSPF, but if routes have different tags, we better just clear the tag */
     if (old->tag != new->tag)
       old->tag = 0;
   }
@@ -160,50 +163,53 @@ ri_compare(const struct proto_ospf *po, const orta *old, const orta *new)
 
   /* Prefer lowest type 1 metric */
   ret = old->metric1 - new->metric1;
+  if (ret != 0)
+    return ret;
+
+  /* Prefer largest area id */
+  ret = (new->oa->areaid > old->oa->areaid) - (new->oa->areaid < old->oa->areaid);
   return ret;
 }
 
 /* Whether the ASBR or the forward address destination is preferred
    in AS external route selection according to 16.4.1. */
 static inline int
-epath_preferred(orta *ep)
+epath_preferred(const orta *ep)
 {
   return (ep->type == RTS_OSPF) && (ep->oa->areaid != 0);
 }
 
-/* 16.4. (3), return 1 if new is better */
+/* Compare existing route with new ASBR route. (RFC 2328, 16.4. (3))
+   Returns:
+   < 0 if old route is better.
+   = 0 if routes are equal (eligible for multipath)
+   > 0 if new router is better.
+   */
 static int
-ri_better_asbr(struct proto_ospf *po, orta *new, orta *old)
+ri_compare_asbr(const struct proto_ospf *po, const orta *old, const orta *new)
 {
+  int ret;
+
   if (old->type == RTS_DUMMY)
     return 1;
 
   if (!po->rfc1583)
   {
-    int new_pref = epath_preferred(new);
-    int old_pref = epath_preferred(old);
-
-    if (new_pref > old_pref)
-      return 1;
-
-    if (new_pref < old_pref)
-      return 0;
+    ret = epath_preferred(new) - epath_preferred(old);
+    if (ret != 0)
+      return ret;
   }
 
-  if (new->metric1 < old->metric1)
-    return 1;
-
-  if (new->metric1 > old->metric1)
-    return 0;
+  ret = old->metric1 - new->metric1;
+  if (ret != 0)
+    return ret;
 
   /* Larger area ID is preferred */
-  if (new->oa->areaid > old->oa->areaid)
-    return 1;
-
-  return 0;
+  ret = (new->oa->areaid > old->oa->areaid) - (new->oa->areaid < old->oa->areaid);
+  return ret;
 }
 
-static int
+static inline int
 orta_prio(const orta *nf)
 {
   /* RFC 3101, 2.5 (6e) priorities */
@@ -230,6 +236,7 @@ static int
 ri_compare_ext(const struct proto_ospf *po, const orta *old, const orta *new)
 {
   int ret;
+
   if (old->type == RTS_DUMMY)
     return 1;
 
@@ -267,15 +274,18 @@ ri_compare_ext(const struct proto_ospf *po, const orta *old, const orta *new)
   /* RFC 3101, 2.4 (2) - If the P-bit settings are the same, the LSA with higher router ID is preferred */
   if (new->options & ORTA_NSSA)
   {
-    ret = new->rid - old->rid;
-    return ret;
+    ret = (new->rid > old->rid) - (new->rid < old->rid);
+    if (ret != 0)
+      return ret;
   }
 
-  return 0;
+  /* Prefer largest area id */
+  ret = (new->oa->areaid > old->oa->areaid) - (new->oa->areaid < old->oa->areaid);
+  return ret;
 }
 
 static inline void
-ri_install_net(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
+ri_install_net(struct proto_ospf *po, ip_addr prefix, int pxlen, const orta *new)
 {
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
   int cmp = ri_compare(po, &old->n, new);
@@ -286,7 +296,7 @@ ri_install_net(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
 }
 
 static inline void
-ri_install_rt(struct ospf_area *oa, u32 rid, orta *new)
+ri_install_rt(struct ospf_area *oa, u32 rid, const orta *new)
 {
   ip_addr addr = ipa_from_rid(rid);
   ort *old = (ort *) fib_get(&oa->rtr, &addr, MAX_PREFIX_LENGTH);
@@ -298,15 +308,18 @@ ri_install_rt(struct ospf_area *oa, u32 rid, orta *new)
 }
 
 static inline void
-ri_install_asbr(struct proto_ospf *po, ip_addr *addr, orta *new)
+ri_install_asbr(struct proto_ospf *po, ip_addr *addr, const orta *new)
 {
   ort *old = (ort *) fib_get(&po->backbone->rtr, addr, MAX_PREFIX_LENGTH);
-  if (ri_better_asbr(po, new, &old->n))
+  int cmp = ri_compare_asbr(po, &old->n, new);
+  if (cmp > 0)
     memcpy(&old->n, new, sizeof(orta));
+  else if (cmp == 0 && po->ecmp)
+    add_nexthops(po, &old->n, new);
 }
 
 static inline void
-ri_install_ext(struct proto_ospf *po, ip_addr prefix, int pxlen, orta *new)
+ri_install_ext(struct proto_ospf *po, ip_addr prefix, int pxlen, const orta *new)
 {
   ort *old = (ort *) fib_get(&po->rtf, &prefix, pxlen);
   int cmp = ri_compare_ext(po, &old->n, new);
