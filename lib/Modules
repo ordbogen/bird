@@ -31,3 +31,5 @@ event.h
 checksum.c
 checksum.h
 alloca.h
+oidlist.h
+oidlist.c
