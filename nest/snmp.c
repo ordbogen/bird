@@ -63,23 +63,29 @@ void snmp_notify(const oid *oid, unsigned int oidlen, const list *varbinds)
   }
 }
 
-static snmp_varbind *snmp_varbind_allocate(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, snmp_varbind_type type, unsigned int data_size)
+static snmp_varbind *snmp_varbind_allocate(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, snmp_varbind_type type, unsigned int data_size, void **data_ptr)
 {
   snmp_varbind *varbind;
   if (copy_oid)
   {
-    u32 *buffer;
+    oid *buffer;
     varbind = (snmp_varbind *)mb_alloc(p, sizeof(*varbind) + oidlen * sizeof(oid[0]) + data_size);
-    buffer = (u32 *)&varbind[1];
+    buffer = (oid *)&varbind[1];
     memcpy(buffer, oid, oidlen * sizeof(oid[0]));
     varbind->oid = buffer;
     varbind->_oid_is_allocated = 1;
+
+    if (data_ptr)
+      *data_ptr = &buffer[oidlen];
   }
   else
   {
     varbind = (snmp_varbind *)mb_alloc(p, sizeof(*varbind) + data_size);
     varbind->oid = oid;
     varbind->_oid_is_allocated = 0;
+
+    if (data_ptr)
+      *data_ptr = &varbind[1];
   }
   varbind->n.next = NULL;
   varbind->n.prev = NULL;
@@ -87,16 +93,17 @@ static snmp_varbind *snmp_varbind_allocate(pool *p, const oid *oid, unsigned int
   varbind->type = type;
   return varbind;
 }
+
 snmp_varbind *snmp_varbind_new_integer32(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, int value)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_INTEGER32, 0);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_INTEGER32, 0, NULL);
   varbind->value.integer32 = value;
   return varbind;
 }
 
 snmp_varbind *snmp_varbind_new_string(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, const u8 *value, unsigned int size)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, 0);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, 0, NULL);
   varbind->value.string.str = value;
   varbind->value.string.size = size;
   varbind->value.string._is_allocated = 0;
@@ -105,8 +112,8 @@ snmp_varbind *snmp_varbind_new_string(pool *p, const oid *oid, unsigned int oidl
 
 snmp_varbind *snmp_varbind_new_string_copy(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, const u8 *value, unsigned int size)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, size);
-  u8 *buffer = (u8 *)&varbind[1];
+  u8 *buffer;
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, size, &buffer);
   memcpy(buffer, value, size);
   varbind->value.string.str = buffer;
   varbind->value.string.size = size;
@@ -116,12 +123,12 @@ snmp_varbind *snmp_varbind_new_string_copy(pool *p, const oid *oid, unsigned int
 
 snmp_varbind *snmp_varbind_new_null(pool *p, const oid *oid, unsigned int oidlen, int copy_oid)
 {
-  return snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_NULL, 0);
+  return snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_NULL, 0, NULL);
 }
 
 snmp_varbind *snmp_varbind_new_object_id(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, const u32 *value, unsigned int size)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, 0);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, 0, NULL);
   varbind->value.oid.oid = value;
   varbind->value.oid.size = size;
   varbind->value.oid._is_allocated = 0;
@@ -130,8 +137,8 @@ snmp_varbind *snmp_varbind_new_object_id(pool *p, const oid *oid, unsigned int o
 
 snmp_varbind *snmp_varbind_new_object_id_copy(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, const u32 *value, unsigned int size)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, size * sizeof(value[0]));
-  u32 *buffer = (u32 *)&varbind[1];
+  u32 *buffer;
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, size * sizeof(value[0]), &buffer);
   memcpy(buffer, value, size * sizeof(value[0]));
   varbind->value.oid.oid = buffer;
   varbind->value.oid.size = size;
@@ -141,40 +148,40 @@ snmp_varbind *snmp_varbind_new_object_id_copy(pool *p, const oid *oid, unsigned 
 
 snmp_varbind *snmp_varbind_new_counter32(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, u32 value)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_COUNTER32, 0);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_COUNTER32, 0, NULL);
   varbind->value.counter32 = value;
   return varbind;
 }
 
 snmp_varbind *snmp_varbind_new_gauge32(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, u32 value)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_GAUGE32, 0);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_GAUGE32, 0, NULL);
   varbind->value.gauge32 = value;
   return varbind;
 }
 
 snmp_varbind *snmp_varbind_new_time_ticks(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, u32 value)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_TIME_TICKS, 0);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_TIME_TICKS, 0, NULL);
   varbind->value.time_ticks = value;
   return varbind;
 }
 
 snmp_varbind *snmp_varbind_new_counter64(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, u64 value)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_COUNTER64, 0);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_COUNTER64, 0, NULL);
   varbind->value.counter64 = value;
   return varbind;
 }
 
 snmp_varbind *snmp_varbind_new_no_such_object(pool *p, const oid *oid, unsigned int oidlen, int copy_oid)
 {
-  return snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_NO_SUCH_OBJECT, 0);
+  return snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_NO_SUCH_OBJECT, 0, NULL);
 }
 
 snmp_varbind *snmp_varbind_new_no_such_instance(pool *p, const oid *oid, unsigned int oidlen, int copy_oid)
 {
-  return snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_NO_SUCH_INSTANCE, 0);
+  return snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_NO_SUCH_INSTANCE, 0, NULL);
 }
 
 snmp_varbind *snmp_varbind_copy(pool *p, const snmp_varbind *varbind)
