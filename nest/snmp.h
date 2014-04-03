@@ -31,7 +31,7 @@ typedef enum _snmp_varbind_type
 typedef struct _snmp_varbind
 {
   node n; /* necessary for varbind lists */
-  const oid *oid;
+  const u32 *oid;
   u8 oidlen;
   u8 type; /* see snmp_varbind_type */
   u8 _oid_is_allocated; /* used internally */
@@ -46,7 +46,7 @@ typedef struct _snmp_varbind
     } string;
     struct
     {
-      const oid *oid;
+      const u32 *oid;
       u8 size;
       u8 _is_allocated; /* used internally */
     } oid;
@@ -58,31 +58,31 @@ typedef struct _snmp_varbind
   } value;
 } snmp_varbind;
 
-snmp_varbind *snmp_varbind_new_integer32(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, int value);
-snmp_varbind *snmp_varbind_new_string(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, const u8 *value, unsigned int length);
-snmp_varbind *snmp_varbind_new_string_copy(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, const u8 *value, unsigned int length);
-snmp_varbind *snmp_varbind_new_null(pool *p, const oid *oid, unsigned int oidlen, int copy_oid);
-snmp_varbind *snmp_varbind_new_object_id(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, const u32 *value, unsigned int size);
-snmp_varbind *snmp_varbind_new_object_id_copy(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, const u32 *value, unsigned int size);
-snmp_varbind *snmp_varbind_new_counter32(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, u32 value);
-snmp_varbind *snmp_varbind_new_gauge32(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, u32 value);
-snmp_varbind *snmp_varbind_new_time_ticks(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, u32 value);
-snmp_varbind *snmp_varbind_new_counter64(pool *p, const oid *oid, unsigned int oidlen, int copy_oid, u64 value);
-snmp_varbind *snmp_varbind_new_no_such_object(pool *p, const oid *oid, unsigned int oidlen, int copy_oid);
-snmp_varbind *snmp_varbind_new_no_such_instance(pool *p, const oid *oid, unsigned int oidlen, int copy_oid);
+snmp_varbind *snmp_varbind_new_integer32(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, int value);
+snmp_varbind *snmp_varbind_new_string(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, const u8 *value, unsigned int length);
+snmp_varbind *snmp_varbind_new_string_copy(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, const u8 *value, unsigned int length);
+snmp_varbind *snmp_varbind_new_null(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid);
+snmp_varbind *snmp_varbind_new_object_id(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, const u32 *value, unsigned int size);
+snmp_varbind *snmp_varbind_new_object_id_copy(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, const u32 *value, unsigned int size);
+snmp_varbind *snmp_varbind_new_counter32(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, u32 value);
+snmp_varbind *snmp_varbind_new_gauge32(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, u32 value);
+snmp_varbind *snmp_varbind_new_time_ticks(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, u32 value);
+snmp_varbind *snmp_varbind_new_counter64(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, u64 value);
+snmp_varbind *snmp_varbind_new_no_such_object(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid);
+snmp_varbind *snmp_varbind_new_no_such_instance(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid);
 snmp_varbind *snmp_varbind_copy(pool *p, const snmp_varbind *varbind); 
 void snmp_varbind_free(snmp_varbind *varbind);
 
 typedef struct _snmp_registration
 {
-  snmp_varbind *(*get_hook)(const oid *oid, unsigned int oidlen, const u32 *sub_oid, unsigned int sub_oidlen, void *user_data);
+  snmp_varbind *(*get_hook)(const u32 *oid, unsigned int oidlen, const u32 *sub_oid, unsigned int sub_oidlen, void *user_data);
   unsigned int (*get_next_hook)(u32 *oid, unsigned int oidlen, void *user_data); /* oid will contain the current object-id. The hook should replace the oid with the next oid (oid is guaranteed to have room for 128 sub ids) and then return the size. If the end is reached, 0 is returned */
   void *user_data;
 } snmp_registration;
 
-void snmp_register(const oid *oid, unsigned int oidlen, snmp_registration *registration);
-void snmp_unregister(const oid *oid, unsigned int oidlen);
-void snmp_notify(const oid *oid, unsigned int oidlen, const list *varbinds);
+void snmp_register(const u32 *oid, unsigned int oidlen, snmp_registration *registration);
+void snmp_unregister(const u32 *oid, unsigned int oidlen);
+void snmp_notify(const u32 *oid, unsigned int oidlen, const list *varbinds);
 
 typedef struct _snmp_protocol snmp_protocol;
 
@@ -91,7 +91,7 @@ struct _snmp_protocol
   node n; /* For the snmp_protocols list */
   void (*register_hook)(snmp_protocol *p, const snmp_registration *registration);
   void (*unregister_hook)(snmp_protocol *p, const snmp_registration *registration);
-  void (*notify_hook)(snmp_protocol *p, const oid *oid, unsigned int oidlen, const list *varbinds);
+  void (*notify_hook)(snmp_protocol *p, const u32 *oid, unsigned int oidlen, const list *varbinds);
   void *user_data;
 };
 
