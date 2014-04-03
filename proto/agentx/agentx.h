@@ -11,6 +11,7 @@
 #include "nest/snmp.h"
 #include "conf/conf.h"
 #include "lib/socket.h"
+#include "lib/hash.h"
 
 struct agentx_tcp_agent
 {
@@ -52,6 +53,35 @@ typedef enum _agentx_state
   AGENTX_STATE_ESTABLISHED
 } agentx_state;
 
+typedef enum _agentx_operation_type
+{
+  AGENTX_OPERATION_OPEN,
+  AGENTX_OPERATION_NOTIFY,
+} agentx_operation_type;
+
+struct agentx_operation_notify
+{
+  bird_clock_t timestamp;
+  u32 *oid;
+  unsigned int oidlen;
+  list varbinds;
+};
+
+typedef struct _agentx_operation agentx_operation;
+
+struct _agentx_operation
+{
+  node n; /* Used when located in linked list */
+  agentx_operation *bucket_next; /* Used when located in hash table */
+  agentx_operation_type type;
+  bird_clock_t timestamp;
+  u32 packet_id;
+  union
+  {
+    struct agentx_operation_notify notify;
+  } payload;
+};
+
 struct agentx_proto
 {
   struct proto p;
@@ -62,6 +92,15 @@ struct agentx_proto
   agentx_state state;
   sock *sk; /* Valid in CONNECTING, OPEN_SENT, and ESTABLISHED states */
   u32 session_id; /* Only valid in the ESTABLISHED state */
+  u32 next_packet_id; /* Valid in OPEN_SENT and ESTABLISHED states */
+
+  list queue; /* List of pending operations */
+
+  HASH(agentx_operation) response_hash;
+  list response_list;
 };
+
+agentx_operation *agentx_dequeue_operation(struct agentx_proto *p);
+void agentx_set_response(struct agentx_proto *p, u32 packet_id, u16 error, u16 index);
 
 #endif // _BIRD_AGENTX_H_
