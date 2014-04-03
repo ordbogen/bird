@@ -44,10 +44,10 @@ static int oidentry_cmp(const u32 *a_oid, unsigned int a_size, const u32 *b_oid,
 {
   while (a_size != 0 && b_size != 0)
   {
-	if (*a_oid < *b_oid)
-	  return -1;
-	else if (*a_oid > *b_oid)
-	  return 1;
+    if (*a_oid < *b_oid)
+      return -1;
+    else if (*a_oid > *b_oid)
+      return 1;
   }
   if (a_size == 0 && b_size == 0)
 	return 0;
@@ -57,7 +57,7 @@ static int oidentry_cmp(const u32 *a_oid, unsigned int a_size, const u32 *b_oid,
 	return 1;
 }
 
-void *oidlist_get(const oidlist *list, const oid *oid, unsigned int oidlen)
+void *oidlist_get(const oidlist *list, const u32 *oid, unsigned int oidlen)
 {
   const oidentry *entry;
   for (entry = list->head; entry != NULL; entry = entry->next)
@@ -71,7 +71,7 @@ void *oidlist_get(const oidlist *list, const oid *oid, unsigned int oidlen)
   return 0;
 }
 
-void oidlist_set(oidlist *list, const oid *oid, unsigned int oidlen, void *value)
+void oidlist_set(oidlist *list, const u32 *oid, unsigned int oidlen, void *value)
 {
   oidentry *entry;
   oidentry *prev = NULL;
@@ -104,7 +104,7 @@ void oidlist_set(oidlist *list, const oid *oid, unsigned int oidlen, void *value
   }
 }
 
-void oidlist_unset(oidlist *list, const oid *oid, unsigned int oidlen)
+void oidlist_unset(oidlist *list, const u32 *oid, unsigned int oidlen)
 {
   oidentry *entry;
   oidentry *prev = NULL;
@@ -126,7 +126,7 @@ void oidlist_unset(oidlist *list, const oid *oid, unsigned int oidlen)
 }
 
 
-oiditer *oidlist_find(oidlist *list, const oid *oid, unsigned int oidlen)
+oiditer *oidlist_find(oidlist *list, const u32 *oid, unsigned int oidlen)
 {
   oidentry *entry;
   oidentry *prev = NULL;
@@ -159,7 +159,7 @@ void oidlist_free(oidlist *list)
   mb_free(list);
 }
 
-const oid *oiditer_oid(const oiditer *iter, unsigned int *oidlen)
+const u32 *oiditer_oid(const oiditer *iter, unsigned int *oidlen)
 {
   if (iter == NULL || iter->entry == NULL)
   {
