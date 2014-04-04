@@ -148,6 +148,7 @@ struct agentx_proto
 };
 
 agentx_operation *agentx_dequeue_operation(struct agentx_conn *conn);
+void agentx_need_response(struct agentx_conn *conn, agentx_operation *oper);
 void agentx_set_response(struct agentx_conn *conn, u32 packet_id, u16 error, u16 index);
 
 #endif // _BIRD_AGENTX_H_

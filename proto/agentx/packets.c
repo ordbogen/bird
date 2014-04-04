@@ -419,23 +419,31 @@ void agentx_tx(struct birdsock *sk)
     switch (oper->type)
     {
       case AGENTX_OPERATION_OPEN:
-	res = agentx_tx_open(conn, oper);
+        res = agentx_tx_open(conn, oper);
+        if (res >= 0)
+          agentx_need_response(conn, oper);
 	break;
 
       case AGENTX_OPERATION_NOTIFY:
-	res = agentx_tx_notify(conn, oper);
+        res = agentx_tx_notify(conn, oper);
+        if (res >= 0)
+          agentx_need_response(conn, oper);
 	break;
 
       case AGENTX_OPERATION_PING:
         res = agentx_tx_ping(conn, oper);
+        if (res >= 0)
+          agentx_need_response(conn, oper);
         break;
 
       case AGENTX_OPERATION_RESPONSE:
         res = agentx_tx_response(conn, oper);
+        agentx_operation_free(oper);
         break;
 
       case AGENTX_OPERATION_CLOSE:
         res = agentx_tx_close(conn, oper);
+        agentx_operation_free(oper);
         break;
     }
     if (res <= 0)

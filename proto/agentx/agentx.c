@@ -14,7 +14,7 @@
 
 #define HASH_PACKET_ORDER	8
 
-static void agentx_operation_free(struct agentx_conn *conn, agentx_operation *oper)
+void agentx_operation_free(struct agentx_conn *conn, agentx_operation *oper)
 {
   snmp_varbind *varbind, *next;
 
@@ -58,12 +58,8 @@ static inline agentx_operation *agentx_operation_new(pool *pool, agentx_operatio
  * agentx_dequeue_operation - get next AgentX operation from queue
  * @conn: AgentX connection
  *
- * This function takes the next operation in queue, populates
- * it with a packet id and a timestamp and moves it to the response
- * hash and list.
- *
- * The function is called from the packet code which is expected
- * to transmit the packet onto the wire after dequeing
+ * This function takes the next operation in queue and populates
+ * it with a packet id and a timestamp.
  */
 agentx_operation *agentx_dequeue_operation(struct agentx_conn *conn)
 {
@@ -76,9 +72,6 @@ agentx_operation *agentx_dequeue_operation(struct agentx_conn *conn)
   oper->timestamp = now;
   oper->packet_id = conn->next_packet_id++;
 
-  HASH_INSERT(conn->response_hash, HASH_PACKET_ID, oper);
-  add_tail(&conn->response_list, &oper->n);
-
   return oper;
 }
 
@@ -88,6 +81,12 @@ static void agentx_enqueue_operation(struct agentx_conn *conn, agentx_operation 
 
   if (conn->sk->tx_hook == NULL)
     agentx_tx(conn->sk);
+}
+
+void agentx_need_response(struct agentx_conn *conn, agentx_operation *oper)
+{
+  HASH_INSERT(conn->response_hash, HASH_PACKET_ID, oper);
+  add_tail(&conn->response_list, &oper->n);
 }
 
 /**
