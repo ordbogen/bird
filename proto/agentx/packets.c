@@ -38,9 +38,9 @@ enum agentx_pdu_type
   AGENTX_PING_PDU = 13,
   AGENTX_INDEX_ALLOCATE_PDU = 14,
   AGENTX_INDEX_DEALLOCATE_PDU = 15,
-  AGENTX_ADD_AGENT_CAPS_PDU = 15,
-  AGENTX_REMOVE_AGENT_CAPS_PDU = 16,
-  AGENTX_RESPONSE_PDU = 17
+  AGENTX_ADD_AGENT_CAPS_PDU = 16,
+  AGENTX_REMOVE_AGENT_CAPS_PDU = 17,
+  AGENTX_RESPONSE_PDU = 18
 };
 
 enum agentx_flag
@@ -200,9 +200,9 @@ static int agentx_tx_open(struct agentx_conn *conn, const agentx_operation *oper
   if (ptr == 0)
     return -1;
 
-  agentx_update_header(conn->sk->tbuf, end);
+  agentx_update_header(conn->sk->tbuf, ptr);
 
-  return sk_send(conn->sk, end - ptr);
+  return sk_send(conn->sk, ptr - conn->sk->tbuf);
 }
 
 /*
@@ -248,7 +248,7 @@ static void agentx_rx_response(struct agentx_conn *conn, const byte *packet)
 {
   const struct agentx_pdu_header *header = (const struct agentx_pdu_header *)packet;
   const struct agentx_response_pdu *payload = (const struct agentx_response_pdu *)(packet + sizeof(struct agentx_pdu_header));
-  if (header->payload_length != sizeof(struct agentx_response_pdu))
+  if (header->payload_length < sizeof(struct agentx_response_pdu))
     return;
 
   agentx_set_response(conn, header->packet_id, payload->error, payload->index);

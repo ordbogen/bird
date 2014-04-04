@@ -61,13 +61,27 @@ typedef enum _agentx_operation_type
 
 struct agentx_operation_notify
 {
+  /* Request data */
   bird_clock_t timestamp;
   u32 *oid;
   unsigned int oidlen;
   list varbinds;
+
+  /* No response data */
+};
+
+struct agentx_operation_open
+{
+  /* No response data */
+
+  /* Response data */
+  u32 session_id;
 };
 
 typedef struct _agentx_operation agentx_operation;
+struct agentx_conn;
+
+typedef void (agentx_callback)(struct agentx_conn *conn, agentx_operation *oper, u16 error, u16 index);
 
 struct _agentx_operation
 {
@@ -76,8 +90,10 @@ struct _agentx_operation
   agentx_operation_type type;
   bird_clock_t timestamp;
   u32 packet_id;
+  agentx_callback *callback;
   union
   {
+    struct agentx_operation_open open;
     struct agentx_operation_notify notify;
   } payload;
 };
@@ -88,7 +104,7 @@ struct agentx_conn
 
   agentx_state state;
   sock *sk; /* Valid in CONNECTION, OPEN_SENT, and ESTABLISHED states */
-  u32 session; /* Valid only in ESTABLISHED state */
+  u32 session_id; /* Valid only in ESTABLISHED state */
   u32 next_packet_id; /* Valid in OPEN_SENT and ESTABLISHED states */
 
   list queue; /* List of pending outgoing connections */
