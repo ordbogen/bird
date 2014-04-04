@@ -57,6 +57,9 @@ typedef enum _agentx_operation_type
 {
   AGENTX_OPERATION_OPEN,
   AGENTX_OPERATION_NOTIFY,
+  AGENTX_OPERATION_PING,
+  AGENTX_OPERATION_RESPONSE,
+  AGENTX_OPERATION_CLOSE
 } agentx_operation_type;
 
 struct agentx_operation_notify
@@ -72,10 +75,29 @@ struct agentx_operation_notify
 
 struct agentx_operation_open
 {
-  /* No response data */
+  /* No request data */
 
   /* Response data */
   u32 session_id;
+};
+
+struct agentx_operation_close
+{
+  /* Request data */
+  u8 reason;
+
+  /* No response data */
+};
+
+struct agentx_operation_response
+{
+  /* Request data */
+  bird_clock_t timestamp;
+  u16 error;
+  u16 index;
+  list varbinds;
+
+  /* No response data */
 };
 
 typedef struct _agentx_operation agentx_operation;
@@ -95,6 +117,8 @@ struct _agentx_operation
   {
     struct agentx_operation_open open;
     struct agentx_operation_notify notify;
+    struct agentx_operation_close close;
+    struct agentx_operation_response response;
   } payload;
 };
 

@@ -60,9 +60,15 @@ struct agentx_open_pdu
 
 struct agentx_response_pdu
 {
-  u32 sysUpTime;
+  u32 sys_up_time;
   u16 error;
   u16 index;
+};
+
+struct agentx_close_pdu
+{
+  u8 reason;
+  u8 reserved[3];
 };
 
 struct agentx_object_id
@@ -133,6 +139,69 @@ static byte *agentx_encode_string(byte *ptr, byte *end, const char *string, unsi
   return ptr + sizeof(struct agentx_string) + length;
 }
 
+static inline byte *agentx_encode_integer32(byte *ptr, byte *end, u32 value)
+{
+  if (end - ptr < sizeof(u32))
+    return NULL;
+  *(u32 *)ptr = value;
+  return ptr + 4;
+}
+
+/*
+ * Encode varbind
+ */
+static byte *agentx_encode_varbind(byte *ptr, byte *end, const snmp_varbind *varbind)
+{
+  ptr = agentx_encode_object_id(ptr, end, varbind->oid, varbind->oidlen);
+  if (ptr == NULL)
+    return NULL;
+
+  switch (varbind->type)
+  {
+    case SNMP_TYPE_INTEGER32:
+      return agentx_encode_integer32(ptr, end, varbind->value.integer32);
+
+    case SNMP_TYPE_OCTET_STRING:
+      return agentx_encode_string(ptr, end, varbind->value.string.str, varbind->value.string.size);
+
+    case SNMP_TYPE_NULL:
+    case SNMP_TYPE_NO_SUCH_OBJECT:
+    case SNMP_TYPE_NO_SUCH_INSTANCE:
+    case SNMP_TYPE_END_OF_MIB_VIEW:
+      return ptr;
+
+    case SNMP_TYPE_OBJECT_IDENTIFIER:
+      return agentx_encode_object_id(ptr, end, varbind->value.oid.oid, varbind->value.oid.size);
+
+    case SNMP_TYPE_IP_ADDRESS:
+      /* TODO */
+      return NULL;
+
+    case SNMP_TYPE_COUNTER32:
+      return agentx_encode_integer32(ptr, end, varbind->value.counter32);
+
+    case SNMP_TYPE_GAUGE32:
+      return agentx_encode_integer32(ptr, end, varbind->value.gauge32);
+
+    case SNMP_TYPE_TIME_TICKS:
+      return agentx_encode_integer32(ptr, end, varbind->value.time_ticks);
+
+    case SNMP_TYPE_OPAQUE:
+      /* TODO */
+      return NULL;
+
+    case SNMP_TYPE_COUNTER64:
+      if (end - ptr < sizeof(u64))
+        return NULL;
+      *(u64 *)ptr = varbind->value.counter64;
+      return ptr + sizeof(u64);
+  }
+
+  return NULL;
+}
+
+
+
 /*
  * Put AgentX header on the transmit buffer
  */
@@ -167,7 +236,7 @@ static inline void agentx_update_header(byte *ptr, byte *end)
 }
 
 /*
- * Transmit AgentX-open-PDU
+ * Transmit Agentx-Open-PDU
  */
 static int agentx_tx_open(struct agentx_conn *conn, const agentx_operation *oper)
 {
@@ -206,12 +275,133 @@ static int agentx_tx_open(struct agentx_conn *conn, const agentx_operation *oper
 }
 
 /*
- * Transmit AgentX-notify-PDU
+ * Transmit Agentx-Notify-PDU
  */
-static int agentx_tx_notify(struct agentx_conn *conn UNUSED, const agentx_operation *oper UNUSED)
+static int agentx_tx_notify(struct agentx_conn *conn, const agentx_operation *oper)
 {
-  /* TODO */
-  return 0;
+  byte *ptr, *end;
+  snmp_varbind *varbind;
+  /* iso(1) org(3) dod(6) internet(1) mgmt(2) mib-2(1) system(1) sysUpTime(3) 0 */
+  static const u32 sys_up_time[] =  {1, 3, 6, 1, 2, 1, 1, 3, 0};
+
+  /* iso(1) org(3) dod(6) internet(1) snmpV2(6) snmpModules(3) snmpMIB(1) snmpMIBObjects(1) snmpTrap(4) snmpTrapOID(1) 0 */
+  static const u32 sys_trap_oid[] = {1, 3, 6, 1, 6, 3, 1, 1, 4, 1, 0};
+
+  ptr = conn->sk->tbuf;
+  end = ptr + conn->sk->tbsize;
+
+  ptr = agentx_encode_header(ptr, end, AGENTX_NOTIFY_PDU, conn->session_id, 0, oper->packet_id);
+  if (ptr == NULL)
+    return -1;
+
+  /* SNMPv2-MIB:sysUpTime.0 */
+  varbind = snmp_varbind_new_time_ticks(conn->proto->p.pool, sys_up_time, OID_LEN(sys_up_time), 0, oper->payload.notify.timestamp);
+  ptr = agentx_encode_varbind(ptr, end, varbind);
+  snmp_varbind_free(varbind);
+  if (ptr == NULL)
+    return -1;
+
+  /* SNMPv2-MIB:sysTrapOID.0 */
+  varbind = snmp_varbind_new_object_id(conn->proto->p.pool, sys_trap_oid, OID_LEN(sys_trap_oid), 0, oper->payload.notify.oid, oper->payload.notify.oidlen);
+  ptr = agentx_encode_varbind(ptr, end, varbind);
+  snmp_varbind_free(varbind);
+  if (ptr == NULL)
+    return -1;
+
+  WALK_LIST(varbind, oper->payload.notify.varbinds)
+  {
+    ptr = agentx_encode_varbind(ptr, end, varbind);
+    if (ptr == NULL)
+      return -1;
+  }
+
+  agentx_update_header(conn->sk->tbuf, ptr);
+
+  return sk_send(conn->sk, ptr - conn->sk->tbuf);
+}
+
+/**
+  * Transmit Agentx-Ping-PDU
+  */
+static int agentx_tx_ping(struct agentx_conn *conn, const agentx_operation *oper)
+{
+  byte *ptr, *end;
+
+  ptr = conn->sk->tbuf;
+  end = ptr + conn->sk->tbsize;
+
+  ptr = agentx_encode_header(ptr, end, AGENTX_PING_PDU, conn->session_id, 0, oper->packet_id);
+  if (ptr == NULL)
+    return -1;
+
+  agentx_update_header(conn->sk->tbuf, ptr);
+
+  return sk_send(conn->sk, ptr - conn->sk->tbuf);
+}
+
+/*
+ * Transmit Agentx-Response-PDU
+ */
+static int agentx_tx_response(struct agentx_conn *conn, const agentx_operation *oper)
+{
+  byte *ptr, *end;
+  struct agentx_response_pdu *pdu;
+  snmp_varbind *varbind;
+
+  ptr = conn->sk->tbuf;
+  end = ptr + conn->sk->tbsize;
+
+  ptr = agentx_encode_header(ptr, end, AGENTX_RESPONSE_PDU, conn->session_id, 0, oper->packet_id);
+  if (ptr == NULL)
+    return -1;
+
+  if (end - ptr < sizeof(struct agentx_response_pdu))
+    return -1;
+
+  pdu = (struct agentx_response_pdu *)ptr;
+  pdu->sys_up_time = oper->payload.response.timestamp;
+  pdu->error = oper->payload.response.error;
+  pdu->index = oper->payload.response.index;
+  ptr += sizeof(struct agentx_response_pdu);
+
+  WALK_LIST(varbind, oper->payload.response.varbinds)
+  {
+    ptr = agentx_encode_varbind(ptr, end, varbind);
+    if (ptr == NULL)
+      return -1;
+  }
+
+  agentx_update_header(conn->sk->tbuf, ptr);
+
+  return sk_send(conn->sk, ptr - conn->sk->tbuf);
+}
+
+/*
+ * Transmit Agentx-Close-PDU
+ */
+static int agentx_tx_close(struct agentx_conn *conn, const agentx_operation *oper)
+{
+  byte *ptr, *end;
+  struct agentx_close_pdu *pdu;
+
+  ptr = conn->sk->tbuf;
+  end = ptr + conn->sk->tbsize;
+
+  ptr = agentx_encode_header(ptr, end, AGENTX_CLOSE_PDU, conn->session_id, 0, oper->packet_id);
+  if (ptr == NULL)
+    return -1;
+
+  if (end - ptr < sizeof(struct agentx_close_pdu))
+    return -1;
+
+  pdu = (struct agentx_close_pdu *)ptr;
+  pdu->reason = oper->payload.close.reason;
+  memset(&pdu->reserved, 0, sizeof(pdu->reserved));
+  ptr += sizeof(struct agentx_close_pdu);
+
+  agentx_update_header(conn->sk->tbuf, ptr);
+
+  return sk_send(conn->sk, ptr - conn->sk->tbuf);
 }
 
 void agentx_tx(struct birdsock *sk)
@@ -235,6 +425,18 @@ void agentx_tx(struct birdsock *sk)
       case AGENTX_OPERATION_NOTIFY:
 	res = agentx_tx_notify(conn, oper);
 	break;
+
+      case AGENTX_OPERATION_PING:
+        res = agentx_tx_ping(conn, oper);
+        break;
+
+      case AGENTX_OPERATION_RESPONSE:
+        res = agentx_tx_response(conn, oper);
+        break;
+
+      case AGENTX_OPERATION_CLOSE:
+        res = agentx_tx_close(conn, oper);
+        break;
     }
     if (res <= 0)
       break;
@@ -244,6 +446,9 @@ void agentx_tx(struct birdsock *sk)
     sk->tx_hook = NULL;
 }
 
+/*
+ * Handle Agentx-Response-PDU
+ */
 static void agentx_rx_response(struct agentx_conn *conn, const byte *packet)
 {
   const struct agentx_pdu_header *header = (const struct agentx_pdu_header *)packet;
@@ -260,8 +465,28 @@ static void agentx_rx_packet(struct agentx_conn *conn, const byte *packet)
   if ((header->flags & AGENTX_FLAG_NON_DEFAULT_CONTEXT) != 0)
     return;
 
-  if (header->type == AGENTX_RESPONSE_PDU)
-    agentx_rx_response(conn, packet);
+  switch (header->type)
+  {
+    case AGENTX_RESPONSE_PDU:
+      agentx_rx_response(conn, packet);
+      break;
+
+    case AGENTX_CLOSE_PDU:
+      /* TODO */
+      break;
+
+    case AGENTX_GET_PDU:
+    case AGENTX_GET_NEXT_PDU:
+    case AGENTX_GET_BULK_PDU:
+      /* TODO */
+      break;
+
+    case AGENTX_TEST_SET_PDU:
+    case AGENTX_COMMIT_SET_PDU:
+    case AGENTX_UNDO_SET_PDU:
+    case AGENTX_CLEANUP_SET_PDU:
+      break;
+  }
 }
 
 int agentx_rx(struct birdsock *sk, int size)

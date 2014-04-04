@@ -32,6 +32,15 @@ static void agentx_operation_free(struct agentx_conn *conn, agentx_operation *op
       break;
 
     case AGENTX_OPERATION_OPEN:
+    case AGENTX_OPERATION_PING:
+    case AGENTX_OPERATION_CLOSE:
+      break;
+
+    case AGENTX_OPERATION_RESPONSE:
+      WALK_LIST_DELSAFE(varbind, next, oper->payload.response.varbinds)
+      {
+        snmp_varbind_free(varbind);
+      }
       break;
   }
 
