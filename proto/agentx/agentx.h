@@ -82,6 +82,21 @@ struct _agentx_operation
   } payload;
 };
 
+struct agentx_conn
+{
+  struct agentx_proto *proto;
+
+  agentx_state state;
+  sock *sk; /* Valid in CONNECTION, OPEN_SENT, and ESTABLISHED states */
+  u32 session; /* Valid only in ESTABLISHED state */
+  u32 next_packet_id; /* Valid in OPEN_SENT and ESTABLISHED states */
+
+  list queue; /* List of pending outgoing connections */
+
+  HASH(agentx_operation) response_hash;
+  list response_list;
+};
+
 struct agentx_proto
 {
   struct proto p;
@@ -89,18 +104,10 @@ struct agentx_proto
 
   snmp_protocol snmp;
 
-  agentx_state state;
-  sock *sk; /* Valid in CONNECTING, OPEN_SENT, and ESTABLISHED states */
-  u32 session_id; /* Only valid in the ESTABLISHED state */
-  u32 next_packet_id; /* Valid in OPEN_SENT and ESTABLISHED states */
-
-  list queue; /* List of pending operations */
-
-  HASH(agentx_operation) response_hash;
-  list response_list;
+  struct agentx_conn *conn;
 };
 
-agentx_operation *agentx_dequeue_operation(struct agentx_proto *p);
-void agentx_set_response(struct agentx_proto *p, u32 packet_id, u16 error, u16 index);
+agentx_operation *agentx_dequeue_operation(struct agentx_conn *conn);
+void agentx_set_response(struct agentx_conn *conn, u32 packet_id, u16 error, u16 index);
 
 #endif // _BIRD_AGENTX_H_

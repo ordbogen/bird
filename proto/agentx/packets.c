@@ -169,15 +169,15 @@ static inline void agentx_update_header(byte *ptr, byte *end)
 /*
  * Transmit AgentX-open-PDU
  */
-static int agentx_tx_open(struct agentx_proto *p, const agentx_operation *oper)
+static int agentx_tx_open(struct agentx_conn *conn, const agentx_operation *oper)
 {
   static const u32 subagent_id[] = {1, 3, 6, 1, 4, 1, 40446};
   static const char subagent_descr[] = "BIRD Internet Routing Daemon";
   byte *ptr, *end;
   struct agentx_open_pdu *open_pdu;
 
-  ptr = p->sk->tbuf;
-  end = ptr + p->sk->tbsize;
+  ptr = conn->sk->tbuf;
+  end = ptr + conn->sk->tbsize;
 
   ptr = agentx_encode_header(ptr, end, AGENTX_OPEN_PDU, 0, 0, oper->packet_id);
   if (ptr == 0)
@@ -200,15 +200,15 @@ static int agentx_tx_open(struct agentx_proto *p, const agentx_operation *oper)
   if (ptr == 0)
     return -1;
 
-  agentx_update_header(p->sk->tbuf, end);
+  agentx_update_header(conn->sk->tbuf, end);
 
-  return sk_send(p->sk, end - ptr);
+  return sk_send(conn->sk, end - ptr);
 }
 
 /*
  * Transmit AgentX-notify-PDU
  */
-static int agentx_tx_notify(struct agentx_proto *p UNUSED, const agentx_operation *oper UNUSED)
+static int agentx_tx_notify(struct agentx_conn *conn UNUSED, const agentx_operation *oper UNUSED)
 {
   /* TODO */
   return 0;
@@ -216,11 +216,11 @@ static int agentx_tx_notify(struct agentx_proto *p UNUSED, const agentx_operatio
 
 void agentx_tx(struct birdsock *sk)
 {
-  struct agentx_proto *p = (struct agentx_proto *)sk->data;
+  struct agentx_conn *conn = (struct agentx_conn *)sk->data;
   
   for (;;)
   {
-    agentx_operation *oper = agentx_dequeue_operation(p);
+    agentx_operation *oper = agentx_dequeue_operation(conn);
     int res;
     if (oper == NULL)
       break;
@@ -229,44 +229,44 @@ void agentx_tx(struct birdsock *sk)
     switch (oper->type)
     {
       case AGENTX_OPERATION_OPEN:
-	res = agentx_tx_open(p, oper);
+	res = agentx_tx_open(conn, oper);
 	break;
 
       case AGENTX_OPERATION_NOTIFY:
-	res = agentx_tx_notify(p, oper);
+	res = agentx_tx_notify(conn, oper);
 	break;
     }
     if (res <= 0)
       break;
   }
  
-  if (EMPTY_LIST(p->queue))
+  if (EMPTY_LIST(conn->queue))
     sk->tx_hook = NULL;
 }
 
-static void agentx_rx_response(struct agentx_proto *p, const byte *packet)
+static void agentx_rx_response(struct agentx_conn *conn, const byte *packet)
 {
   const struct agentx_pdu_header *header = (const struct agentx_pdu_header *)packet;
   const struct agentx_response_pdu *payload = (const struct agentx_response_pdu *)(packet + sizeof(struct agentx_pdu_header));
   if (header->payload_length != sizeof(struct agentx_response_pdu))
     return;
 
-  agentx_set_response(p, header->packet_id, payload->error, payload->index);
+  agentx_set_response(conn, header->packet_id, payload->error, payload->index);
 }
 
-static void agentx_rx_packet(struct agentx_proto *p, const byte *packet)
+static void agentx_rx_packet(struct agentx_conn *conn, const byte *packet)
 {
   const struct agentx_pdu_header *header = (const struct agentx_pdu_header *)packet;
   if ((header->flags & AGENTX_FLAG_NON_DEFAULT_CONTEXT) != 0)
     return;
 
   if (header->type == AGENTX_RESPONSE_PDU)
-    agentx_rx_response(p, packet);
+    agentx_rx_response(conn, packet);
 }
 
 int agentx_rx(struct birdsock *sk, int size)
 {
-  struct agentx_proto *p = (struct agentx_proto *)sk->data;
+  struct agentx_conn *conn = (struct agentx_conn *)sk->data;
   const byte *ptr = sk->rbuf;
 
   while (size >= sizeof(struct agentx_pdu_header))
@@ -292,7 +292,7 @@ int agentx_rx(struct birdsock *sk, int size)
     
     if (sizeof(struct agentx_pdu_header) + header->payload_length < size)
     {
-      if (header->payload_length > p->sk->rbsize - sizeof(struct agentx_pdu_header))
+      if (header->payload_length > conn->sk->rbsize - sizeof(struct agentx_pdu_header))
       {
         /* Packet too large for receive buffer */
         /* TODO */
@@ -300,7 +300,7 @@ int agentx_rx(struct birdsock *sk, int size)
       return 0;
     }
 
-    agentx_rx_packet(p, ptr);
+    agentx_rx_packet(conn, ptr);
 
     ptr += sizeof(struct agentx_pdu_header) + header->payload_length;
     size -= sizeof(struct agentx_pdu_header) + header->payload_length;

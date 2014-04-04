@@ -14,11 +14,11 @@
 
 #define HASH_PACKET_ORDER	8
 
-static void agentx_operation_free(struct agentx_proto *p, agentx_operation *oper)
+static void agentx_operation_free(struct agentx_conn *conn, agentx_operation *oper)
 {
   snmp_varbind *varbind, *next;
 
-  HASH_REMOVE(p->response_hash, HASH_PACKET_ID, oper);
+  HASH_REMOVE(conn->response_hash, HASH_PACKET_ID, oper);
   rem_node(&oper->n);
 
   switch (oper->type)
@@ -38,16 +38,16 @@ static void agentx_operation_free(struct agentx_proto *p, agentx_operation *oper
   mb_free(oper);
 }
 
-static inline agentx_operation *agentx_operation_new(struct agentx_proto *p, agentx_operation_type type)
+static inline agentx_operation *agentx_operation_new(pool *pool, agentx_operation_type type)
 {
-  agentx_operation *oper = (agentx_operation *)mb_allocz(p->p.pool, sizeof(*oper));
+  agentx_operation *oper = (agentx_operation *)mb_allocz(pool, sizeof(*oper));
   oper->type = type;
   return oper;
 }
 
 /**
  * agentx_dequeue_operation - get next AgentX operation from queue
- * @p: AgentX instance
+ * @conn: AgentX connection
  *
  * This function takes the next operation in queue, populates
  * it with a packet id and a timestamp and moves it to the response
@@ -56,51 +56,51 @@ static inline agentx_operation *agentx_operation_new(struct agentx_proto *p, age
  * The function is called from the packet code which is expected
  * to transmit the packet onto the wire after dequeing
  */
-agentx_operation *agentx_dequeue_operation(struct agentx_proto *p)
+agentx_operation *agentx_dequeue_operation(struct agentx_conn *conn)
 {
-  agentx_operation *oper = (agentx_operation *)p->queue.head;
+  agentx_operation *oper = (agentx_operation *)conn->queue.head;
   if (oper != NULL)
     rem_node(&oper->n);
 
   oper->timestamp = now;
-  oper->packet_id = p->next_packet_id++;
+  oper->packet_id = conn->next_packet_id++;
 
-  HASH_INSERT(p->response_hash, HASH_PACKET_ID, oper);
-  add_tail(&p->response_list, &oper->n);
+  HASH_INSERT(conn->response_hash, HASH_PACKET_ID, oper);
+  add_tail(&conn->response_list, &oper->n);
 
   return oper;
 }
 
-static void agentx_enqueue_operation(struct agentx_proto *p, agentx_operation *oper)
+static void agentx_enqueue_operation(struct agentx_conn *conn, agentx_operation *oper)
 {
-  add_tail(&p->queue, &oper->n);
+  add_tail(&conn->queue, &oper->n);
 
-  if (p->sk->tx_hook == NULL)
-    agentx_tx(p->sk);
+  if (conn->sk->tx_hook == NULL)
+    agentx_tx(conn->sk);
 }
 
 /**
  * agentx_set_response - register response code
- * @p: AgentX instance
+ * @conn: AgentX connection
  * @packet_id: Packet id to register the response to
  * @error: AgentX error code
  * @index: AgentX index
  */
-void agentx_set_response(struct agentx_proto *p, u32 packet_id, u16 error, u16 index)
+void agentx_set_response(struct agentx_conn *conn, u32 packet_id, u16 error, u16 index)
 {
-  agentx_operation *oper = HASH_FIND(p->response_hash, HASH_PACKET_ID, packet_id);
+  agentx_operation *oper = HASH_FIND(conn->response_hash, HASH_PACKET_ID, packet_id);
   if (oper == NULL)
     return;
 
   /* TODO - Print to log if something fails */
 
-  agentx_operation_free(p, oper);
+  agentx_operation_free(conn, oper);
 }
 
 static void agentx_register_hook(snmp_protocol *snmp, const snmp_registration *registration)
 {
-  struct agentx_proto *p = (struct agentx_proto *)snmp->user_data;
-  if (p->state == AGENTX_STATE_ESTABLISHED)
+  struct agentx_conn *conn = (struct agentx_conn *)snmp->user_data;
+  if (conn->state == AGENTX_STATE_ESTABLISHED)
   {
     /* TODO */
   }
@@ -108,8 +108,8 @@ static void agentx_register_hook(snmp_protocol *snmp, const snmp_registration *r
 
 static void agentx_unregister_hook(snmp_protocol *snmp, const snmp_registration *registration)
 {
-  struct agentx_proto *p = (struct agentx_proto *)snmp->user_data;
-  if (p->state == AGENTX_STATE_ESTABLISHED)
+  struct agentx_conn *conn = (struct agentx_conn *)snmp->user_data;
+  if (conn->state == AGENTX_STATE_ESTABLISHED)
   {
     /* TODO */
   }
@@ -117,90 +117,79 @@ static void agentx_unregister_hook(snmp_protocol *snmp, const snmp_registration 
 
 static void agentx_notify_hook(snmp_protocol *snmp, const u32 *oid, unsigned int oidlen, const list *varbinds)
 {
-  struct agentx_proto *p = (struct agentx_proto *)snmp->user_data;
-  if (p->state == AGENTX_STATE_ESTABLISHED)
+  struct agentx_conn *conn = (struct agentx_conn *)snmp->user_data;
+  if (conn->state == AGENTX_STATE_ESTABLISHED)
   {
     const snmp_varbind *varbind;
-    agentx_operation *oper = agentx_operation_new(p, AGENTX_OPERATION_NOTIFY);
+    agentx_operation *oper = agentx_operation_new(conn->proto->p.pool, AGENTX_OPERATION_NOTIFY);
 
     oper->payload.notify.timestamp = now;
 
-    oper->payload.notify.oid = mb_alloc(p->p.pool, oidlen * sizeof(*oid));
+    oper->payload.notify.oid = mb_alloc(conn->proto->p.pool, oidlen * sizeof(*oid));
     oper->payload.notify.oidlen = oidlen;
     memcpy(oper->payload.notify.oid, oid, oidlen * sizeof(*oid));
 
     init_list(&oper->payload.notify.varbinds);
     WALK_LIST(varbind, *varbinds)
     {
-      snmp_varbind *varbind_copy = snmp_varbind_copy(p->p.pool, varbind);
+      snmp_varbind *varbind_copy = snmp_varbind_copy(conn->proto->p.pool, varbind);
       add_tail(&oper->payload.notify.varbinds, &varbind_copy->n);
     }
 
-    agentx_enqueue_operation(p, oper);
+    agentx_enqueue_operation(conn, oper);
   }
-}
-
-static struct proto *agentx_init(struct proto_config *C)
-{
-  struct agentx_proto *p = (struct agentx_proto *)proto_new(C, sizeof(*p));
-
-  p->cf = (struct agentx_config *)C;
-
-  p->snmp.register_hook = agentx_register_hook;
-  p->snmp.unregister_hook = agentx_unregister_hook;
-  p->snmp.notify_hook = agentx_notify_hook;
-  p->snmp.user_data = (void *)p;
-
-  p->state = AGENTX_STATE_DISABLED;
-  p->sk = NULL;
-  p->session_id = 0;
-  p->next_packet_id = 1;
-
-  init_list(&p->queue);
-  HASH_INIT(p->response_hash, p->p.pool, HASH_PACKET_ORDER);
-  init_list(&p->response_list);
-
-  return &p->p;
 }
 
 static void agentx_connected_hook(sock *sk)
 {
-  struct agentx_proto *p = (struct agentx_proto *)sk->data;
-  agentx_operation *oper = agentx_operation_new(p, AGENTX_OPERATION_OPEN);
-  p->sk->rx_hook = agentx_rx;
-  p->state = AGENTX_STATE_OPEN_SENT;
-  agentx_enqueue_operation(p, oper);
+  struct agentx_conn *conn = (struct agentx_conn *)sk->data;
+  agentx_operation *oper = agentx_operation_new(conn->proto->p.pool, AGENTX_OPERATION_OPEN);
+  conn->sk->rx_hook = agentx_rx;
+  conn->state = AGENTX_STATE_OPEN_SENT;
+  agentx_enqueue_operation(conn, oper);
 }
 
 static void agentx_err_hook(sock *sk UNUSED, int er UNUSED)
 {
 }
 
-static int agentx_connect(struct agentx_proto *p)
+static int agentx_connect(struct agentx_conn *conn)
 {
   sock *sk;
 
-  sk = sk_new(p->p.pool);
-  if (p->cf->transport == AGENTX_TRANSPORT_TCP)
+  sk = sk_new(conn->proto->p.pool);
+  if (conn->proto->cf->transport == AGENTX_TRANSPORT_TCP)
   {
     sk->type = SK_TCP_ACTIVE;
-    sk->data = p;
+    sk->data = conn;
     sk->saddr = IPA_NONE;
-    sk->daddr = p->cf->agent.tcp.addr;
-    sk->dport = p->cf->agent.tcp.port;
+    sk->daddr = conn->proto->cf->agent.tcp.addr;
+    sk->dport = conn->proto->cf->agent.tcp.port;
   }
   sk->tx_hook = agentx_connected_hook;
   sk->err_hook = agentx_err_hook;
 
-  p->state = AGENTX_STATE_CONNECTING;
-  p->sk = sk;
+  conn->state = AGENTX_STATE_CONNECTING;
+  conn->sk = sk;
+
   if (sk_open(sk) < 0)
   {
-    p->state = AGENTX_STATE_DISCONNECTED;
+    conn->state = AGENTX_STATE_DISCONNECTED;
     return 0;
   }
 
   return 1;
+}
+
+static struct agentx_conn *agentx_new_conn(struct agentx_proto *p)
+{
+  struct agentx_conn *conn = (struct agentx_conn *)mb_allocz(p->p.pool, sizeof(*conn));
+  conn->proto = p;
+  conn->state = AGENTX_STATE_DISABLED;
+  init_list(&conn->queue);
+  HASH_INIT(conn->response_hash, p->p.pool, HASH_PACKET_ORDER);
+  init_list(&conn->response_list);
+  return conn;
 }
 
 static int agentx_start(struct proto *P)
@@ -209,7 +198,9 @@ static int agentx_start(struct proto *P)
 
   snmp_add_protocol(&p->snmp);
 
-  if (agentx_connect(p))
+  p->conn = agentx_new_conn(p);
+
+  if (agentx_connect(p->conn))
     return PS_START;
   else
     return PS_DOWN;
@@ -223,13 +214,32 @@ static int agentx_shutdown(struct proto *P)
 
   snmp_remove_protocol(&p->snmp);
 
+  p->conn = NULL;
+
   return PS_DOWN;
 }
 
+static struct proto *agentx_init(struct proto_config *C)
+{
+  struct agentx_proto *p = (struct agentx_proto *)proto_new(C, sizeof(*p));
+
+  p->cf = (struct agentx_config *)C;
+
+  p->snmp.register_hook = agentx_register_hook;
+  p->snmp.unregister_hook = agentx_unregister_hook;
+  p->snmp.notify_hook = agentx_notify_hook;
+  p->snmp.user_data = (void *)p;
+
+  p->conn = NULL;
+
+  return &p->p;
+}
+
+
 struct protocol proto_agentx = {
   .name =			"AgentX",
-  .template =			"agentx%d",
+  .template =		"agentx%d",
   .init =			agentx_init,
   .start =			agentx_start,
-  .shutdown =			agentx_shutdown,
+  .shutdown =		agentx_shutdown,
 };
