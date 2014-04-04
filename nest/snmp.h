@@ -58,6 +58,8 @@ typedef struct _snmp_varbind
   } value;
 } snmp_varbind;
 
+#define OID_LEN(_oid)   (sizeof(_oid) / sizeof(_oid[0]))
+
 snmp_varbind *snmp_varbind_new_integer32(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, int value);
 snmp_varbind *snmp_varbind_new_string(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, const u8 *value, unsigned int length);
 snmp_varbind *snmp_varbind_new_string_copy(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, const u8 *value, unsigned int length);
