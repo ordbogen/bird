@@ -64,46 +64,32 @@ typedef enum _agentx_operation_type
 
 struct agentx_operation_notify
 {
-  /* Request data */
   bird_clock_t timestamp;
   u32 *oid;
   unsigned int oidlen;
   list varbinds;
-
-  /* No response data */
 };
 
 struct agentx_operation_open
 {
-  /* No request data */
-
-  /* Response data */
   u32 session_id;
 };
 
 struct agentx_operation_close
 {
-  /* Request data */
   u8 reason;
-
-  /* No response data */
 };
 
 struct agentx_operation_response
 {
-  /* Request data */
   bird_clock_t timestamp;
   u16 error;
   u16 index;
   list varbinds;
-
-  /* No response data */
 };
 
 typedef struct _agentx_operation agentx_operation;
 struct agentx_conn;
-
-typedef void (agentx_callback)(struct agentx_conn *conn, agentx_operation *oper, u16 error, u16 index);
 
 struct _agentx_operation
 {
@@ -112,7 +98,6 @@ struct _agentx_operation
   agentx_operation_type type;
   bird_clock_t timestamp;
   u32 packet_id;
-  agentx_callback *callback;
   union
   {
     struct agentx_operation_open open;
@@ -147,7 +132,10 @@ struct agentx_proto
   struct agentx_conn *conn;
 };
 
-agentx_operation *agentx_dequeue_operation(struct agentx_conn *conn);
+agentx_operation *agentx_get_operation_for_transmit(struct agentx_conn *conn);
+agentx_operation *agentx_get_operation_for_response(struct agentx_conn *conn, u32 packet_id);
+void agentx_operation_free(agentx_operation *oper);
+void agentx_rx_open_response(struct agentx_conn *conn, u16 error, u16 index, u32 session_id);
 void agentx_need_response(struct agentx_conn *conn, agentx_operation *oper);
 void agentx_set_response(struct agentx_conn *conn, u32 packet_id, u16 error, u16 index);
 

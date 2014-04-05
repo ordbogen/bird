@@ -43,6 +43,23 @@ enum agentx_pdu_type
   AGENTX_RESPONSE_PDU = 18
 };
 
+enum agentx_varbind_type
+{
+  AGENTX_TYPE_INTEGER = 2,
+  AGENTX_TYPE_OCTET_STRING = 4,
+  AGENTX_TYPE_NULL = 5,
+  AGENTX_TYPE_OBJECT_IDENTIFIER = 6,
+  AGENTX_TYPE_IP_ADDRESS = 64,
+  AGENTX_TYPE_COUNTER32 = 65,
+  AGENTX_TYPE_GAUGE32 = 66,
+  AGENTX_TYPE_TIME_TICKS = 67,
+  AGENTX_TYPE_OPAQUE = 68,
+  AGENTX_TYPE_COUNTER64 = 70,
+  AGENTX_TYPE_NO_SUCH_OBJECT = 128,
+  AGENTX_TYPE_NO_SUCH_INSTANCE = 129,
+  AGENTX_TYPE_END_OF_MIB_VIEW = 130
+};
+
 enum agentx_flag
 {
   AGENTX_FLAG_INSTANCE_REGISTRATION = (1 << 0),
@@ -71,6 +88,12 @@ struct agentx_close_pdu
   u8 reserved[3];
 };
 
+struct agentx_varbind
+{
+  u16 type;
+  u16 reserved;
+};
+
 struct agentx_object_id
 {
   u8 n_subid;
@@ -91,21 +114,22 @@ struct agentx_string
  */
 static byte *agentx_encode_object_id(byte *ptr, byte *end, const u32 *oid, unsigned int oidlen)
 {
-  static const u32 prefix[] = {1, 3, 6, 1, 2};
+  static const u32 prefix[] = {1, 3, 6, 1};
   struct agentx_object_id *buffer = (struct agentx_object_id *)ptr;
 
-  if (oidlen > 5 && oid[5] < 256 && memcmp(oid, prefix, sizeof(prefix)) == 0)
+  if (oidlen > OID_LEN(prefix) && oid[OID_LEN(prefix)] != 0 && oid[OID_LEN(prefix)] < 256 && memcmp(oid, prefix, sizeof(prefix)) == 0)
   {
-    if (ptr + sizeof(struct agentx_object_id) + (oidlen - 6) * sizeof(*oid) > end)
+    if (ptr + sizeof(struct agentx_object_id) + (oidlen - OID_LEN(prefix) - 1) * sizeof(*oid) > end)
       return 0;
 
-    oid += 6;
-    oidlen -= 6;
+    oidlen -= OID_LEN(prefix) + 1;
 
     buffer->n_subid = oidlen;
-    buffer->prefix = oid[5];
+    buffer->prefix = oid[OID_LEN(prefix)];
     buffer->include = 0;
     buffer->reserved = 0;
+    
+    oid += OID_LEN(prefix) + 1;
   }
   else
   {
@@ -152,6 +176,15 @@ static inline byte *agentx_encode_integer32(byte *ptr, byte *end, u32 value)
  */
 static byte *agentx_encode_varbind(byte *ptr, byte *end, const snmp_varbind *varbind)
 {
+  struct agentx_varbind *header;
+
+  if (end - ptr < sizeof(struct agentx_varbind))
+    return NULL;
+
+  header = (struct agentx_varbind *)ptr;
+  header->reserved = 0;
+  ptr += sizeof(struct agentx_varbind);
+
   ptr = agentx_encode_object_id(ptr, end, varbind->oid, varbind->oidlen);
   if (ptr == NULL)
     return NULL;
@@ -159,42 +192,61 @@ static byte *agentx_encode_varbind(byte *ptr, byte *end, const snmp_varbind *var
   switch (varbind->type)
   {
     case SNMP_TYPE_INTEGER32:
+      header->type = AGENTX_TYPE_INTEGER;
       return agentx_encode_integer32(ptr, end, varbind->value.integer32);
 
     case SNMP_TYPE_OCTET_STRING:
+      header->type = AGENTX_TYPE_OCTET_STRING;
       return agentx_encode_string(ptr, end, varbind->value.string.str, varbind->value.string.size);
 
     case SNMP_TYPE_NULL:
-    case SNMP_TYPE_NO_SUCH_OBJECT:
-    case SNMP_TYPE_NO_SUCH_INSTANCE:
-    case SNMP_TYPE_END_OF_MIB_VIEW:
+      header->type = AGENTX_TYPE_NULL;
       return ptr;
 
     case SNMP_TYPE_OBJECT_IDENTIFIER:
+      header->type = AGENTX_TYPE_OBJECT_IDENTIFIER;
       return agentx_encode_object_id(ptr, end, varbind->value.oid.oid, varbind->value.oid.size);
 
     case SNMP_TYPE_IP_ADDRESS:
+      header->type = AGENTX_TYPE_IP_ADDRESS;
       /* TODO */
       return NULL;
 
     case SNMP_TYPE_COUNTER32:
+      header->type = AGENTX_TYPE_COUNTER32;
       return agentx_encode_integer32(ptr, end, varbind->value.counter32);
 
     case SNMP_TYPE_GAUGE32:
+      header->type = AGENTX_TYPE_GAUGE32;
       return agentx_encode_integer32(ptr, end, varbind->value.gauge32);
 
     case SNMP_TYPE_TIME_TICKS:
+      header->type = AGENTX_TYPE_TIME_TICKS;
       return agentx_encode_integer32(ptr, end, varbind->value.time_ticks);
 
     case SNMP_TYPE_OPAQUE:
+      header->type = AGENTX_TYPE_OPAQUE;
       /* TODO */
       return NULL;
 
     case SNMP_TYPE_COUNTER64:
       if (end - ptr < sizeof(u64))
         return NULL;
+      header->type = AGENTX_TYPE_COUNTER64;
       *(u64 *)ptr = varbind->value.counter64;
       return ptr + sizeof(u64);
+
+    case SNMP_TYPE_NO_SUCH_OBJECT:
+      header->type = AGENTX_TYPE_NO_SUCH_OBJECT;
+      return ptr;
+
+    case SNMP_TYPE_NO_SUCH_INSTANCE:
+      header->type = AGENTX_TYPE_NO_SUCH_INSTANCE;
+      return ptr;
+
+    case SNMP_TYPE_END_OF_MIB_VIEW:
+      header->type = AGENTX_TYPE_END_OF_MIB_VIEW;
+      return ptr;
   }
 
   return NULL;
@@ -410,7 +462,7 @@ void agentx_tx(struct birdsock *sk)
   
   for (;;)
   {
-    agentx_operation *oper = agentx_dequeue_operation(conn);
+    agentx_operation *oper = agentx_get_operation_for_transmit(conn);
     int res;
     if (oper == NULL)
       break;
@@ -461,10 +513,34 @@ static void agentx_rx_response(struct agentx_conn *conn, const byte *packet)
 {
   const struct agentx_pdu_header *header = (const struct agentx_pdu_header *)packet;
   const struct agentx_response_pdu *payload = (const struct agentx_response_pdu *)(packet + sizeof(struct agentx_pdu_header));
+  agentx_operation *oper;
   if (header->payload_length < sizeof(struct agentx_response_pdu))
     return;
 
-  agentx_set_response(conn, header->packet_id, payload->error, payload->index);
+  oper = agentx_get_operation_for_response(conn, header->packet_id);
+  if (oper == NULL)
+    return;
+
+  switch (oper->type)
+  {
+    case AGENTX_OPERATION_OPEN:
+      agentx_rx_open_response(conn, payload->error, payload->index, header->session_id);
+      break;
+
+    case AGENTX_OPERATION_NOTIFY:
+      /* TODO */
+      break;
+
+    case AGENTX_OPERATION_PING:
+      /* TODO */
+      break;
+
+    case AGENTX_OPERATION_RESPONSE:
+    case AGENTX_OPERATION_CLOSE:
+      break;
+  }
+
+  agentx_operation_free(oper);
 }
 
 static void agentx_rx_packet(struct agentx_conn *conn, const byte *packet)

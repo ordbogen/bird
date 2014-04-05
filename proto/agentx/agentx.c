@@ -14,12 +14,12 @@
 
 #define HASH_PACKET_ORDER	8
 
-void agentx_operation_free(struct agentx_conn *conn, agentx_operation *oper)
+void agentx_operation_free(agentx_operation *oper)
 {
   snmp_varbind *varbind, *next;
 
-  HASH_REMOVE(conn->response_hash, HASH_PACKET_ID, oper);
-  rem2_node(&oper->n);
+  if (NODE_VALID(oper))
+    rem2_node(&oper->n);
 
   switch (oper->type)
   {
@@ -61,7 +61,7 @@ static inline agentx_operation *agentx_operation_new(pool *pool, agentx_operatio
  * This function takes the next operation in queue and populates
  * it with a packet id and a timestamp.
  */
-agentx_operation *agentx_dequeue_operation(struct agentx_conn *conn)
+agentx_operation *agentx_get_operation_for_transmit(struct agentx_conn *conn)
 {
   agentx_operation *oper = HEAD(conn->queue);
   if (!NODE_VALID(oper))
@@ -89,29 +89,22 @@ void agentx_need_response(struct agentx_conn *conn, agentx_operation *oper)
   add_tail(&conn->response_list, &oper->n);
 }
 
-/**
- * agentx_set_response - register response code
- * @conn: AgentX connection
- * @packet_id: Packet id to register the response to
- * @error: AgentX error code
- * @index: AgentX index
- */
-void agentx_set_response(struct agentx_conn *conn, u32 packet_id, u16 error, u16 index)
+agentx_operation *agentx_get_operation_for_response(struct agentx_conn *conn, u32 packet_id)
 {
   agentx_operation *oper = HASH_FIND(conn->response_hash, HASH_PACKET_ID, packet_id);
   if (oper == NULL)
-    return;
+    return NULL;
 
-  if (oper->callback != NULL)
-    oper->callback(conn, oper, error, index);
+  rem2_node(&oper->n);
+  HASH_REMOVE(conn->response_hash, HASH_PACKET_ID, oper);
 
-  agentx_operation_free(conn, oper);
+  return oper;
 }
 
 static void agentx_register_hook(snmp_protocol *snmp, const snmp_registration *registration)
 {
-  struct agentx_conn *conn = (struct agentx_conn *)snmp->user_data;
-  if (conn->state == AGENTX_STATE_ESTABLISHED)
+  struct agentx_proto *p = (struct agentx_proto *)snmp->user_data;
+  if (p->conn != NULL && p->conn->state == AGENTX_STATE_ESTABLISHED)
   {
     /* TODO */
   }
@@ -119,8 +112,8 @@ static void agentx_register_hook(snmp_protocol *snmp, const snmp_registration *r
 
 static void agentx_unregister_hook(snmp_protocol *snmp, const snmp_registration *registration)
 {
-  struct agentx_conn *conn = (struct agentx_conn *)snmp->user_data;
-  if (conn->state == AGENTX_STATE_ESTABLISHED)
+  struct agentx_proto *p = (struct agentx_proto *)snmp->user_data;
+  if (p->conn != NULL && p->conn->state == AGENTX_STATE_ESTABLISHED)
   {
     /* TODO */
   }
@@ -128,22 +121,23 @@ static void agentx_unregister_hook(snmp_protocol *snmp, const snmp_registration 
 
 static void agentx_notify_hook(snmp_protocol *snmp, const u32 *oid, unsigned int oidlen, const list *varbinds)
 {
-  struct agentx_conn *conn = (struct agentx_conn *)snmp->user_data;
-  if (conn->state == AGENTX_STATE_ESTABLISHED)
+  struct agentx_proto *p = (struct agentx_proto *)snmp->user_data;
+  if (p->conn != NULL && p->conn->state == AGENTX_STATE_ESTABLISHED)
   {
+    struct agentx_conn *conn = p->conn;
     const snmp_varbind *varbind;
-    agentx_operation *oper = agentx_operation_new(conn->proto->p.pool, AGENTX_OPERATION_NOTIFY);
+    agentx_operation *oper = agentx_operation_new(p->p.pool, AGENTX_OPERATION_NOTIFY);
 
     oper->payload.notify.timestamp = now;
 
-    oper->payload.notify.oid = mb_alloc(conn->proto->p.pool, oidlen * sizeof(*oid));
+    oper->payload.notify.oid = mb_alloc(p->p.pool, oidlen * sizeof(*oid));
     oper->payload.notify.oidlen = oidlen;
     memcpy(oper->payload.notify.oid, oid, oidlen * sizeof(*oid));
 
     init_list(&oper->payload.notify.varbinds);
     WALK_LIST(varbind, *varbinds)
     {
-      snmp_varbind *varbind_copy = snmp_varbind_copy(conn->proto->p.pool, varbind);
+      snmp_varbind *varbind_copy = snmp_varbind_copy(p->p.pool, varbind);
       add_tail(&oper->payload.notify.varbinds, &varbind_copy->n);
     }
 
@@ -151,11 +145,11 @@ static void agentx_notify_hook(snmp_protocol *snmp, const u32 *oid, unsigned int
   }
 }
 
-static void agentx_rx_open_response(struct agentx_conn *conn, agentx_operation *oper, u16 error, u16 index)
+void agentx_rx_open_response(struct agentx_conn *conn, u16 error, u16 index, u32 session_id)
 {
   if (error == 0)
   {
-    conn->session_id = oper->payload.open.session_id;
+    conn->session_id = session_id;
     conn->state = AGENTX_STATE_ESTABLISHED;
 
     proto_notify_state(&conn->proto->p, PS_UP);
@@ -176,7 +170,6 @@ static void agentx_connected_hook(sock *sk)
   conn->state = AGENTX_STATE_OPEN_SENT;
 
   oper = agentx_operation_new(conn->proto->p.pool, AGENTX_OPERATION_OPEN);
-  oper->callback = agentx_rx_open_response;
   agentx_enqueue_operation(conn, oper);
 }
 
