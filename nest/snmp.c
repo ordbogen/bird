@@ -18,7 +18,8 @@ void snmp_add_protocol(snmp_protocol *protocol)
 
 void snmp_remove_protocol(snmp_protocol *protocol)
 {
-  rem_node(&protocol->n);
+  if (NODE_VALID(&protocol->n))
+    rem2_node(&protocol->n);
 }
 
 void snmp_register(const u32 *oid, unsigned int oidlen, snmp_registration *registration)
@@ -69,7 +70,7 @@ static snmp_varbind *snmp_varbind_allocate(pool *p, const u32 *oid, unsigned int
   if (copy_oid)
   {
     u32 *buffer;
-    varbind = (snmp_varbind *)mb_alloc(p, sizeof(*varbind) + oidlen * sizeof(oid[0]) + data_size);
+    varbind = (snmp_varbind *)mb_allocz(p, sizeof(*varbind) + oidlen * sizeof(oid[0]) + data_size);
     buffer = (u32 *)&varbind[1];
     memcpy(buffer, oid, oidlen * sizeof(oid[0]));
     varbind->oid = buffer;
@@ -80,7 +81,7 @@ static snmp_varbind *snmp_varbind_allocate(pool *p, const u32 *oid, unsigned int
   }
   else
   {
-    varbind = (snmp_varbind *)mb_alloc(p, sizeof(*varbind) + data_size);
+    varbind = (snmp_varbind *)mb_allocz(p, sizeof(*varbind) + data_size);
     varbind->oid = oid;
     varbind->_oid_is_allocated = 0;
 
@@ -128,7 +129,7 @@ snmp_varbind *snmp_varbind_new_null(pool *p, const u32 *oid, unsigned int oidlen
 
 snmp_varbind *snmp_varbind_new_object_id(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, const u32 *value, unsigned int size)
 {
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, 0, NULL);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OBJECT_IDENTIFIER, 0, NULL);
   varbind->value.oid.oid = value;
   varbind->value.oid.size = size;
   varbind->value.oid._is_allocated = 0;
@@ -138,7 +139,7 @@ snmp_varbind *snmp_varbind_new_object_id(pool *p, const u32 *oid, unsigned int o
 snmp_varbind *snmp_varbind_new_object_id_copy(pool *p, const u32 *oid, unsigned int oidlen, int copy_oid, const u32 *value, unsigned int size)
 {
   u32 *buffer;
-  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OCTET_STRING, size * sizeof(value[0]), (void **)&buffer);
+  snmp_varbind *varbind = snmp_varbind_allocate(p, oid, oidlen, copy_oid, SNMP_TYPE_OBJECT_IDENTIFIER, size * sizeof(value[0]), (void **)&buffer);
   memcpy(buffer, value, size * sizeof(value[0]));
   varbind->value.oid.oid = buffer;
   varbind->value.oid.size = size;
@@ -232,6 +233,7 @@ snmp_varbind *snmp_varbind_copy(pool *p, const snmp_varbind *varbind)
 
 void snmp_varbind_free(snmp_varbind *varbind)
 {
-  rem_node(&varbind->n);
+  if (NODE_VALID(&varbind->n))
+    rem2_node(&varbind->n);
   mb_free(varbind);
 }
