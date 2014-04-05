@@ -61,6 +61,7 @@
 #include "nest/route.h"
 #include "nest/cli.h"
 #include "nest/locks.h"
+#include "nest/snmp.h"
 #include "conf/conf.h"
 #include "lib/socket.h"
 #include "lib/resource.h"
@@ -337,11 +338,85 @@ bgp_stop(struct bgp_proto *p, unsigned subcode)
   ev_schedule(p->event);
 }
 
+static void
+bgp_conn_send_notification(struct bgp_conn *conn, unsigned int new_state)
+{
+  /* iso(1) org(3) dod(6) internet(1) private(4) enterprises(1) ordbogen(40446) bgp4V2(4) bgp4V2Objects(1) bgp4V2PeerTable(2) bgp4V2PeerEntry(1) */
+  static const u32 bgp4v2_peer_entry[] =                        {1, 3, 6, 1, 4, 1, 40446, 4, 1, 2, 1};
+  /* iso(1) org(3) dod(6) internet(1) private(4) enterprises(1) ordbogen(40446) bgp4V2(4) bgp4V2Notifications(0) ? */
+  static const u32 bgp4v2_established_notification[] =          {1, 3, 6, 1, 4, 1, 40446, 4, 0, 1};
+
+  if (conn->state > new_state)
+  {
+  }
+  else if (conn->state != BS_ESTABLISHED && new_state == BS_ESTABLISHED)
+  {
+    list varbinds;
+#ifndef IPV6
+    u32 oid[OID_LEN(bgp4v2_peer_entry) + 8];
+#else
+    u32 oid[OID_LEN(bgp4v2_peer_entry) + 20];
+#endif
+    snmp_varbind *varbind, *next;
+
+    init_list(&varbinds);
+
+    memcpy(oid, bgp4v2_peer_entry, sizeof(bgp4v2_peer_entry));
+    oid[OID_LEN(bgp4v2_peer_entry) + 1] = 0; /* bgp4V2PeerInstance */
+#ifndef IPV6
+    oid[OID_LEN(bgp4v2_peer_entry) + 2] = 1; /* bgp4V2PeerRemoteAddrType = ipv4 */
+    oid[OID_LEN(bgp4v2_peer_entry) + 3] = 4;
+    oid[OID_LEN(bgp4v2_peer_entry) + 4] = (_I(conn->bgp->cf->remote_ip) >> 24) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 5] = (_I(conn->bgp->cf->remote_ip) >> 16) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 6] = (_I(conn->bgp->cf->remote_ip) >> 8) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 7] = _I(conn->bgp->cf->remote_ip) & 0xff;
+#else
+    oid[OID_LEN(bgp4v2_peer_entry) + 2] = 2; /* bgp4V2PeerRemoteAddrType = ipv6 */
+    oid[OID_LEN(bgp4v2_peer_entry) + 3] = 16;
+    oid[OID_LEN(bgp4v2_peer_entry) + 4] = (_I0(conn->bgp->cf->remote_ip) >> 24) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 5] = (_I0(conn->bgp->cf->remote_ip) >> 16) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 6] = (_I0(conn->bgp->cf->remote_ip) >> 8) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 7] = _I0(conn->bgp->cf->remote_ip) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 8] = (_I1(conn->bgp->cf->remote_ip) >> 24) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 9] = (_I1(conn->bgp->cf->remote_ip) >> 16) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 10] = (_I1(conn->bgp->cf->remote_ip) >> 8) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 11] = _I1(conn->bgp->cf->remote_ip) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 12] = (_I2(conn->bgp->cf->remote_ip) >> 24) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 13] = (_I2(conn->bgp->cf->remote_ip) >> 16) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 14] = (_I2(conn->bgp->cf->remote_ip) >> 8) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 15] = _I2(conn->bgp->cf->remote_ip) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 16] = (_I3(conn->bgp->cf->remote_ip) >> 24) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 17] = (_I3(conn->bgp->cf->remote_ip) >> 16) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 18] = (_I3(conn->bgp->cf->remote_ip) >> 8) & 0xff;
+    oid[OID_LEN(bgp4v2_peer_entry) + 19] = _I3(conn->bgp->cf->remote_ip) & 0xff;
+#endif
+
+    oid[OID_LEN(bgp4v2_peer_entry) + 0] = 13; /* bgp4V2PeerState */
+    add_tail(&varbinds, NODE(snmp_varbind_new_integer32(conn->bgp->p.pool, oid, OID_LEN(oid), 1, new_state)));
+
+    oid[OID_LEN(bgp4v2_peer_entry) + 0] = 6; /* bgp4V2PeerLocalPort */
+    add_tail(&varbinds, NODE(snmp_varbind_new_integer32(conn->bgp->p.pool, oid, OID_LEN(oid), 1, 179)));
+
+    oid[OID_LEN(bgp4v2_peer_entry) + 0] = 9; /* bgp4V2PeerRemotePort */
+    add_tail(&varbinds, NODE(snmp_varbind_new_integer32(conn->bgp->p.pool, oid, OID_LEN(oid), 1, 179)));
+
+    snmp_notify(bgp4v2_established_notification, OID_LEN(bgp4v2_established_notification), &varbinds);
+
+    WALK_LIST_DELSAFE(varbind, next, varbinds)
+    {
+      snmp_varbind_free(varbind);
+    }
+  }
+}
+
 static inline void
 bgp_conn_set_state(struct bgp_conn *conn, unsigned new_state)
 {
   if (conn->bgp->p.mrtdump & MD_STATES)
     mrt_dump_bgp_state_change(conn, conn->state, new_state);
+
+  if (conn->bgp->cf->snmp)
+    bgp_conn_send_notification(conn, new_state);
 
   conn->state = new_state;
 }

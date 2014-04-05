@@ -60,6 +60,7 @@ struct bgp_config {
   char *password;			/* Password used for MD5 authentication */
   struct rtable_config *igp_table;	/* Table used for recursive next hop lookups */
   int bfd;				/* Use BFD for liveness detection */
+  int snmp;                             /* Enable SNMP */
 };
 
 #define MLL_SELF 1
