@@ -192,6 +192,7 @@ proto_item:
  | TABLE rtable { this_proto->table = $2; }
  | ROUTER ID idval { this_proto->router_id = $3; }
  | DESCRIPTION TEXT { this_proto->dsc = $2; }
+ | IPFIX bool { this_proto->ipfix = $2; }
  ;
 
 imexport:

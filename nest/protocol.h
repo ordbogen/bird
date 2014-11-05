@@ -75,7 +75,8 @@ void protos_dump_all(void);
 
 extern struct protocol
   proto_device, proto_radv, proto_rip, proto_static,
-  proto_ospf, proto_pipe, proto_bgp, proto_bfd;
+  proto_ospf, proto_pipe, proto_bgp, proto_bfd,
+  proto_ipfix;
 
 /*
  *	Routing Protocol Instance
@@ -99,6 +100,7 @@ struct proto_config {
 					   (relevant when in_keep_filtered is active) */
   struct proto_limit *in_limit;		/* Limit for importing routes from protocol */
   struct proto_limit *out_limit;	/* Limit for exporting routes to protocol */
+  int ipfix;                      /* Export statistics over IPFIX */
 
   /* Check proto_reconfigure() and proto_copy_config() after changing struct proto_config */
 

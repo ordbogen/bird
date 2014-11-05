@@ -1,6 +1,7 @@
 H Protocols
 C bfd
 C bgp
+C ipfix
 C ospf
 C pipe
 C rip
