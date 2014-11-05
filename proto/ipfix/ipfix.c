@@ -4,7 +4,7 @@
  *  Can be freely distributed and used under the terms of the GNU GPL
  */
 
-#undef LOCAL_DEBUG
+#define LOCAL_DEBUG
 
 #include "nest/bird.h"
 #include "nest/protocol.h"
@@ -15,31 +15,75 @@
 
 static int ipfix_connect(struct ipfix_proto *proto);
 
+static void ipfix_send_templates(struct ipfix_proto *proto)
+{
+  int len;
+
+  DBG("IPFIX: Sending template\n");
+
+  len = ipfix_fill_template(proto->sk, ++proto->sequence_number);
+
+  if (proto->cfg->protocol == IPFIX_PROTO_UDP)
+    sk_send_to(proto->sk, len, proto->cfg->dest, proto->cfg->port);
+  else
+    sk_send(proto->sk, len);
+
+}
+
 static void ipfix_counter_timer_hook(struct timer *t)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)t->data;
+
+  DBG("IPFIX: Counter timer\n");
 
   if (proto->sk == NULL) {
     if (ipfix_connect(proto) != PS_UP)
       return;
   }
 
-  if (proto->template_sent == 0)
-    return;
-
   /* TODO - Send counters */
+
+  tm_start(t, proto->cfg->interval);
 }
 
 static void ipfix_template_timer_hook(struct timer *t)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)t->data;
 
+  DBG("IPFIX: Template timer\n");
+
   if (proto->sk == NULL) {
     if (ipfix_connect(proto) != PS_UP)
       return;
   }
 
-  /* TODO - Send templates */
+  ipfix_send_templates(proto);
+
+  tm_start(t, proto->cfg->template_interval);
+}
+
+static void ipfix_init_timers(struct ipfix_proto *proto)
+{
+  if (proto->counter_timer == NULL) {
+    proto->counter_timer = tm_new_set(
+        proto->p.pool,
+        ipfix_counter_timer_hook,
+        proto,
+        0,
+        0);
+
+    proto->template_timer = tm_new_set(
+        proto->p.pool,
+        ipfix_template_timer_hook,
+        proto,
+        0,
+        0);
+
+    ipfix_send_templates(proto);
+
+    tm_start(proto->counter_timer, proto->cfg->interval);
+    tm_start(proto->template_timer, proto->cfg->template_interval);
+  }
 }
 
 static void ipfix_tx_hook(sock *sk)
@@ -48,10 +92,14 @@ static void ipfix_tx_hook(sock *sk)
 
   struct ipfix_proto *proto;
 
+  DBG("IPFIX: Connected\n");
+
   sk->tx_hook = NULL;
 
   proto = (struct ipfix_proto *)sk->data;
   proto_notify_state(&proto->p, PS_UP);
+
+  ipfix_init_timers(proto);
 }
 
 static void ipfix_err_hook(sock *sk, int err)
@@ -59,6 +107,8 @@ static void ipfix_err_hook(sock *sk, int err)
   /* Connection failed */
 
   struct ipfix_proto *proto;
+
+  DBG("IPFIX: Error\n");
 
   proto = (struct ipfix_proto *)sk->data;
   proto->sk = NULL;
@@ -74,6 +124,8 @@ static int ipfix_connect(struct ipfix_proto *proto)
   struct ipfix_config *cfg = proto->cfg;
   sock *sk;
 
+  DBG("IPFIX: Connecting\n");
+
   sk = sk_new(proto->p.pool);
   sk->data = proto;
   sk->saddr = cfg->source;
@@ -83,26 +135,33 @@ static int ipfix_connect(struct ipfix_proto *proto)
   sk->tx_hook = ipfix_tx_hook;
   sk->err_hook = ipfix_err_hook;
 
+  proto->sk = sk;
+
   if (cfg->protocol == IPFIX_PROTO_UDP) {
     sk->type = SK_UDP;
-    sk->tbsize = 512;
+    sk_set_tbsize(sk, 512);
+
+    if (sk_open(sk) < 0)
+      return PS_DOWN;
+    else {
+      ipfix_tx_hook(sk);
+      return PS_UP;
+    }
   }
-  else if (cfg->protocol == IPFIX_PROTO_TCP) {
+  else {
+    int ret;
+
     sk->type = SK_TCP;
-    sk->tbsize = 65536;
-
+    sk_set_tbsize(sk, 65536);
+  
+    ret = sk_open(sk);
+    if (ret == 0)
+      return PS_START;
+    else if (ret < 0)
+      return PS_DOWN;
+    else
+      return PS_UP;
   }
-
-  proto->sk = sk;
-  proto->template_sent = 0;
-
-  int ret = sk_open(sk);
-  if (ret == 0)
-    return PS_START;
-  else if (ret < 0)
-    return PS_DOWN;
-  else
-    return PS_UP;
 }
 
 static struct proto *ipfix_init(struct proto_config *c)
@@ -122,21 +181,6 @@ static struct proto *ipfix_init(struct proto_config *c)
 static int ipfix_start(struct proto *p)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)p;
-
-  proto->counter_timer = tm_new_set(
-      proto->p.pool,
-      ipfix_counter_timer_hook,
-      proto,
-      0,
-      1);
-
-  proto->template_timer = tm_new_set(
-      p->pool,
-      ipfix_template_timer_hook,
-      proto,
-      0,
-      1);
-
   return ipfix_connect(proto);
 }
 
