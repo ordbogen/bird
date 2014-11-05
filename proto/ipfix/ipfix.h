@@ -27,6 +27,7 @@ struct ipfix_proto {
   struct proto p;
   struct ipfix_config *cfg;
 
+  int template_sent;
   sock *sk;
   timer *counter_timer;
   timer *template_timer;

@@ -13,24 +13,141 @@
 
 #include "ipfix.h"
 
-static struct proto *ipfix_init(struct proto_config *cfg)
+static int ipfix_connect(struct ipfix_proto *proto);
+
+static void ipfix_counter_timer_hook(struct timer *t)
 {
-  struct proto *proto = proto_new(cfg, sizeof(struct ipfix_proto));
-  struct ipfix_config *ipfix_cfg = (struct ipfix_config *)cfg;
-  struct ipfix_proto *ipfix_proto = (struct ipfix_proto *)proto;
+  struct ipfix_proto *proto = (struct ipfix_proto *)t->data;
 
-  ipfix_proto->cfg = ipfix_cfg;
+  if (proto->sk == NULL) {
+    if (ipfix_connect(proto) != PS_UP)
+      return;
+  }
 
-  return proto;
+  if (proto->template_sent == 0)
+    return;
+
+  /* TODO - Send counters */
 }
 
-static int ipfix_start(struct proto *proto)
+static void ipfix_template_timer_hook(struct timer *t)
 {
-  return PS_UP;
+  struct ipfix_proto *proto = (struct ipfix_proto *)t->data;
+
+  if (proto->sk == NULL) {
+    if (ipfix_connect(proto) != PS_UP)
+      return;
+  }
+
+  /* TODO - Send templates */
 }
 
-static int ipfix_shutdown(struct proto* proto)
+static void ipfix_tx_hook(sock *sk)
 {
+  /* We are connected */
+
+  struct ipfix_proto *proto;
+
+  sk->tx_hook = NULL;
+
+  proto = (struct ipfix_proto *)sk->data;
+  proto_notify_state(&proto->p, PS_UP);
+}
+
+static void ipfix_err_hook(sock *sk, int err)
+{
+  /* Connection failed */
+
+  struct ipfix_proto *proto;
+
+  proto = (struct ipfix_proto *)sk->data;
+  proto->sk = NULL;
+
+  /* Terminate socket, but attempt to reconnect at next interval */
+  rfree(sk);
+
+  proto_notify_state(&proto->p, PS_DOWN);
+}
+
+static int ipfix_connect(struct ipfix_proto *proto)
+{
+  struct ipfix_config *cfg = proto->cfg;
+  sock *sk;
+
+  sk = sk_new(proto->p.pool);
+  sk->data = proto;
+  sk->saddr = cfg->source;
+  sk->daddr = cfg->dest;
+  sk->dport = cfg->port;
+
+  sk->tx_hook = ipfix_tx_hook;
+  sk->err_hook = ipfix_err_hook;
+
+  if (cfg->protocol == IPFIX_PROTO_UDP) {
+    sk->type = SK_UDP;
+    sk->tbsize = 512;
+  }
+  else if (cfg->protocol == IPFIX_PROTO_TCP) {
+    sk->type = SK_TCP;
+    sk->tbsize = 65536;
+
+  }
+
+  proto->sk = sk;
+  proto->template_sent = 0;
+
+  int ret = sk_open(sk);
+  if (ret == 0)
+    return PS_START;
+  else if (ret < 0)
+    return PS_DOWN;
+  else
+    return PS_UP;
+}
+
+static struct proto *ipfix_init(struct proto_config *c)
+{
+  struct proto *p = proto_new(c, sizeof(struct ipfix_proto));
+  struct ipfix_config *cfg = (struct ipfix_config *)c;
+  struct ipfix_proto *proto = (struct ipfix_proto *)p;
+
+  proto->cfg = cfg;
+  proto->sk = NULL;
+  proto->counter_timer = NULL;
+  proto->template_timer = NULL;
+
+  return p;
+}
+
+static int ipfix_start(struct proto *p)
+{
+  struct ipfix_proto *proto = (struct ipfix_proto *)p;
+
+  proto->counter_timer = tm_new_set(
+      proto->p.pool,
+      ipfix_counter_timer_hook,
+      proto,
+      0,
+      1);
+
+  proto->template_timer = tm_new_set(
+      p->pool,
+      ipfix_template_timer_hook,
+      proto,
+      0,
+      1);
+
+  return ipfix_connect(proto);
+}
+
+static int ipfix_shutdown(struct proto* p)
+{
+  struct ipfix_proto *proto = (struct ipfix_proto *)p;
+
+  rfree(proto->sk);
+  rfree(proto->counter_timer);
+  rfree(proto->template_timer);
+
   return PS_DOWN;
 }
 
