@@ -166,5 +166,6 @@ struct ipfix_option_template_record_header {
 /* Private API */
 
 int ipfix_fill_template(sock *sk, u32 sequence_number);
+int ipfix_fill_counters(sock *sk, u32 sequence_number, int *poffset);
 
 #endif // _BIRD_IPFIX_H_

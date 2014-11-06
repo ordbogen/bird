@@ -229,6 +229,19 @@ static inline u8 *ipfix_add_type_info(u8 *ptr,
   return ptr;
 }
 
+static inline u8 *ipfix_add_bird_data(u8 *ptr, struct proto *proto)
+{
+  ptr = ipfix_add_string(ptr, proto->name);
+
+  *(u32 *)ptr = htonl(proto->stats.imp_updates_received);
+  ptr += 4;
+
+  *(u32 *)ptr = htonl(proto->stats.imp_withdraws_received);
+  ptr += 4;
+
+  return ptr;
+}
+
 static inline u8 *ipfix_add_options_data_set(u8 *ptr)
 {
   u8 *set_ptr;
@@ -295,6 +308,61 @@ int ipfix_fill_template(sock *sk, u32 sequence_number)
   ptr = ipfix_add_options_data_set(ptr);
 
   ipfix_finalize_header(header_ptr, ptr);
+
+  return ptr - header_ptr;
+}
+
+int ipfix_fill_counters(sock *sk, u32 sequence_number, int *poffset)
+{
+  int pos;
+  int offset = *poffset;
+  u8 *header_ptr;
+  u8 *end;
+  u8 *set_ptr;
+  u8 *ptr;
+  struct proto *proto;
+  int incomplete;
+
+  header_ptr = sk->tbuf;
+  end = header_ptr + sk->tbsize;
+
+  set_ptr = ipfix_prepare_header(header_ptr, sequence_number);
+  ptr = ipfix_prepare_set(set_ptr, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD);
+
+  pos = 0;
+  incomplete = 0;
+  WALK_LIST(proto, active_proto_list) {
+    if (pos < offset) {
+      ++pos;
+      continue;
+    }
+
+    if (proto->cf->ipfix) {
+      int size = strlen(proto->name);
+      if (size < 255)
+        ++size;
+      else
+        size += 3;
+      size += 8;
+      if (ptr + size > end)
+      {
+        incomplete = 1;
+        break;
+      }
+
+      ptr = ipfix_add_bird_data(ptr, proto);
+    }
+
+    ++pos;
+  }
+
+  ipfix_finalize_set(set_ptr, ptr);
+  ipfix_finalize_header(header_ptr, ptr);
+
+  if (incomplete)
+    *poffset = pos;
+  else
+    *poffset = -1;
 
   return ptr - header_ptr;
 }

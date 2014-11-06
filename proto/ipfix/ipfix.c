@@ -33,6 +33,8 @@ static void ipfix_send_templates(struct ipfix_proto *proto)
 static void ipfix_counter_timer_hook(struct timer *t)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)t->data;
+  int len;
+  int offset;
 
   DBG("IPFIX: Counter timer\n");
 
@@ -41,7 +43,13 @@ static void ipfix_counter_timer_hook(struct timer *t)
       return;
   }
 
-  /* TODO - Send counters */
+  offset = 0;
+  len = ipfix_fill_counters(proto->sk, ++proto->sequence_number, &offset);
+
+  if (proto->cfg->protocol == IPFIX_PROTO_UDP)
+    sk_send_to(proto->sk, len, proto->cfg->dest, proto->cfg->port);
+  else
+    sk_send(proto->sk, len);
 
   tm_start(t, proto->cfg->interval);
 }
