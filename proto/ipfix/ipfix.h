@@ -79,7 +79,8 @@ enum ipfix_enterprise_number {
   IPFIX_ENTERPRISE_ORDBOGEN = 40446
 };
 
-enum ipfix_type {
+typedef enum _ipfix_type {
+  IPFIX_TYPE_INVALID = -1,
   IPFIX_TYPE_OCTET_ARRAY = 0,
   IPFIX_TYPE_UNSIGNED8 = 1,
   IPFIX_TYPE_UNSIGNED16 = 2,
@@ -94,7 +95,7 @@ enum ipfix_type {
   IPFIX_TYPE_BOOLEAN = 11,
   IPFIX_TYPE_MAC_ADDRESS = 12,
   IPFIX_TYPE_STRING = 13,
-  IPFIX_TYPE_DATA_TIME_SECONDS = 14,
+  IPFIX_TYPE_DATE_TIME_SECONDS = 14,
   IPFIX_TYPE_DATE_TIME_MILLISECONDS = 15,
   IPFIX_TYPE_DATE_TIME_MICROSECONDS = 16,
   IPFIX_TYPE_DATE_TIME_NANOSECONDS = 17,
@@ -103,9 +104,9 @@ enum ipfix_type {
   IPFIX_TYPE_BASIC_LIST = 20,
   IPFIX_TYPE_SUB_TEMPLATE_LIST = 21,
   IPFIX_TYPE_SUB_TEMPLATE_MULTI_LIST = 22
-};
+} ipfix_type;
 
-enum ipfix_semantic {
+typedef enum _ipfix_semantic {
   IPFIX_SEMANTIC_DEFAULT = 0,
   IPFIX_SEMANTIC_QUANTITY = 1,
   IPFIX_SEMANTIC_TOTAL_COUNTER = 2,
@@ -113,9 +114,9 @@ enum ipfix_semantic {
   IPFIX_SEMANTIC_IDENTIFIER = 4,
   IPFIX_SEMANTIC_FLAGS = 5,
   IPFIX_SEMANTIC_LIST = 6
-};
+} ipfix_semantic;
 
-enum ipfix_unit {
+typedef enum _ipfix_unit {
   IPFIX_UNIT_NONE = 0,
   IPFIX_UNIT_BITS = 1,
   IPFIX_UNIT_OCTETS = 2,
@@ -130,9 +131,9 @@ enum ipfix_unit {
   IPFIX_UNIT_HOPS = 11,
   IPFIX_UNIT_ENTRIES = 12,
   IPFIX_UNIT_FRAMES = 13
-};
+} ipfix_unit;
 
-enum ipfix_information_elements {
+typedef enum _ipfix_information_element {
   IPFIX_IE_TEMPLATE_ID = 145,
   IPFIX_IE_FLOW_KEY_INDICATOR = 173,
   IPFIX_IE_INFORMATION_ELEMENT_ID = 303,
@@ -144,13 +145,13 @@ enum ipfix_information_elements {
   IPFIX_IE_INFORMATION_ELEMENT_SEMANTICS = 344,
   IPFIX_IE_INFORMATION_ELEMENT_UNITS = 345,
   IPFIX_IE_PRIVATE_ENTERPRISE_NUMBER = 346
-};
+} ipfix_informtion_element;
 
-enum ipfix_bird_information_elements {
+typedef enum _ipfix_bird_information_element {
   IPFIX_IE_BIRD_NAME = 1,
   IPFIX_IE_BIRD_UPDATES = 2,
   IPFIX_IE_BIRD_WITHDRAWALS = 3
-};
+} ipfix_bird_information_element;
 
 struct ipfix_template_record_header {
   u16 template_id;

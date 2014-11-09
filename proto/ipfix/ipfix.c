@@ -116,7 +116,7 @@ static void ipfix_err_hook(sock *sk, int err)
 
   struct ipfix_proto *proto;
 
-  DBG("IPFIX: Error\n");
+  DBG("IPFIX: Error (%d)\n", err);
 
   proto = (struct ipfix_proto *)sk->data;
   proto->sk = NULL;
