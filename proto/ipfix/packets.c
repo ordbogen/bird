@@ -220,7 +220,7 @@ static inline u8* ipfix_prepare_header(u8* ptr, u32 sequence_number)
   struct ipfix_message_header *header = (struct ipfix_message_header *)ptr;
   header->version_number = htons(10);
   /* header->length = 0; */
-  header->export_time = htonl(now);
+  header->export_time = htonl(now_real);
   header->sequence_number = htonl(sequence_number);
   header->observation_domain_id = 0;
 
