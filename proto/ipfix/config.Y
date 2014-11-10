@@ -14,10 +14,11 @@ CF_DEFINES
 
 CF_DECLS
 
-CF_KEYWORDS(IPFIX, PROTOCOL, SOURCE, DESTINATION, PORT, TEMPLATE, INTERVAL, TCP, UDP, SCTP)
+CF_KEYWORDS(IPFIX, PROTOCOL, SOURCE, DESTINATION, PORT, TEMPLATE, INTERVAL, TCP, UDP, SCTP, MTU)
 
 %type <i> ipfix_port;
 %type <i> ipfix_proto;
+%type <i> ipfix_mtu;
 
 CF_GRAMMAR
 
@@ -78,6 +79,11 @@ ipfix_template_interval: expr
     cf_error("Invalid template interval");
 };
 
+ipfix_mtu: expr
+{
+  IPFIX_CFG->mtu = $1;
+};
+
 ipfix_proto_item:
    proto_item
  | DESTINATION ipfix_destination
@@ -85,6 +91,7 @@ ipfix_proto_item:
  | PROTOCOL ipfix_protocol
  | INTERVAL ipfix_interval
  | TEMPLATE INTERVAL ipfix_template_interval
+ | MTU ipfix_mtu
  ;
 
 ipfix_proto_opts:
@@ -98,7 +105,14 @@ ipfix_proto: ipfix_proto_start proto_name '{' ipfix_proto_opts '}'
     cf_error("SCTP not supported yet");
 
   if (ipa_zero(IPFIX_CFG->dest))
-	cf_error("Missing destination");
+    cf_error("Missing destination");
+
+  if (IPFIX_CFG->mtu == 0) {
+    if (IPFIX_CFG->protocol == IPFIX_PROTO_TCP)
+      IPFIX_CFG->mtu = 65535;
+    else
+      IPFIX_CFG->mtu = 512;
+  }
 };
 
 CF_CODE

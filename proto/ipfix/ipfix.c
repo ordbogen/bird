@@ -14,27 +14,121 @@
 #include "ipfix.h"
 
 static int ipfix_connect(struct ipfix_proto *proto);
+static void ipfix_flush_queue(struct ipfix_proto *proto);
+
+static void ipfix_tx_hook(sock *sk)
+{
+  struct ipfix_proto *proto = (struct ipfix_proto *)sk->data;
+  struct ipfix_pending_packet *packet;
+
+  DBG("IPFIX: ipfix_tx_hook\n");
+
+  sk->tx_hook = NULL;
+
+  if (EMPTY_LIST(proto->pending_packets))
+    return;
+
+  packet = HEAD(proto->pending_packets);
+
+  rem_node(&packet->n);
+  mb_free(packet);
+  
+  sk_set_tbuf(sk, NULL);
+
+  ipfix_flush_queue(proto);
+}
+
+static void ipfix_flush_queue(struct ipfix_proto *proto)
+{
+  DBG("IPFIX: ipfix_flush_queue\n");
+
+  if (proto->sk->tx_hook != NULL)
+    return;
+
+  while (!EMPTY_LIST(proto->pending_packets)) {
+    struct ipfix_pending_packet *packet = HEAD(proto->pending_packets);
+    int ret;
+
+    sk_set_tbuf(proto->sk, &packet->data);
+
+    if (proto->cfg->protocol == IPFIX_PROTO_TCP)
+      ret = sk_send(proto->sk, packet->len);
+    else
+      ret = sk_send_to(proto->sk, packet->len, proto->cfg->dest, proto->cfg->port);
+
+    if (ret < 0)
+    {
+      proto->sk->tx_hook = ipfix_tx_hook;
+      return;
+    }
+
+    rem_node(&packet->n);
+    mb_free(packet);
+    
+    sk_set_tbuf(proto->sk, NULL);
+  }
+}
 
 static void ipfix_send_templates(struct ipfix_proto *proto)
 {
-  int len;
-
   DBG("IPFIX: Sending template\n");
 
-  len = ipfix_fill_template(proto->sk, ++proto->sequence_number);
+  int template_offset = 0;
+  int option_template_offset = 0;
+  int flow_id_offset = 0;
+  int type_info_offset = 0;
+  int count = 0;
 
-  if (proto->cfg->protocol == IPFIX_PROTO_UDP)
-    sk_send_to(proto->sk, len, proto->cfg->dest, proto->cfg->port);
-  else
-    sk_send(proto->sk, len);
+  while (template_offset != -1 || option_template_offset != -1 || flow_id_offset != -1 ||  type_info_offset != -1) {
+    struct ipfix_pending_packet *packet;
 
+    packet = (struct ipfix_pending_packet *)mb_alloc(proto->p.pool, sizeof(*packet) + proto->cfg->mtu);
+    packet->len = ipfix_fill_template(
+        packet->data,
+        packet->data + proto->cfg->mtu,
+        ++proto->sequence_number,
+        &template_offset,
+        &option_template_offset,
+        &flow_id_offset,
+        &type_info_offset);
+
+    add_tail(&proto->pending_packets, &packet->n);
+
+    ++count;
+  }
+
+  DBG("IPFIX: Added %i templates to queue\n", count);
+
+  ipfix_flush_queue(proto);
 }
+
+static void ipfix_send_counters(struct ipfix_proto *proto)
+{
+  DBG("IPFIX: Sending counters\n");
+
+  int proto_offset = 0;
+
+  while (proto_offset != -1)
+  {
+    struct ipfix_pending_packet *packet;
+
+    packet = (struct ipfix_pending_packet *)mb_alloc(proto->p.pool, sizeof(*packet) + proto->cfg->mtu);
+    packet->len = ipfix_fill_counters(
+        packet->data,
+        packet->data + proto->cfg->mtu,
+        ++proto->sequence_number,
+        &proto_offset);
+
+    add_tail(&proto->pending_packets, &packet->n);
+  }
+
+  ipfix_flush_queue(proto);
+}
+
 
 static void ipfix_counter_timer_hook(struct timer *t)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)t->data;
-  int len;
-  int offset;
 
   DBG("IPFIX: Counter timer\n");
 
@@ -43,13 +137,7 @@ static void ipfix_counter_timer_hook(struct timer *t)
       return;
   }
 
-  offset = 0;
-  len = ipfix_fill_counters(proto->sk, ++proto->sequence_number, &offset);
-
-  if (proto->cfg->protocol == IPFIX_PROTO_UDP)
-    sk_send_to(proto->sk, len, proto->cfg->dest, proto->cfg->port);
-  else
-    sk_send(proto->sk, len);
+  ipfix_send_counters(proto);
 
   tm_start(t, proto->cfg->interval);
 }
@@ -94,7 +182,7 @@ static void ipfix_init_timers(struct ipfix_proto *proto)
   }
 }
 
-static void ipfix_tx_hook(sock *sk)
+static void ipfix_tx_connect_hook(sock *sk)
 {
   /* We are connected */
 
@@ -140,19 +228,18 @@ static int ipfix_connect(struct ipfix_proto *proto)
   sk->daddr = cfg->dest;
   sk->dport = cfg->port;
 
-  sk->tx_hook = ipfix_tx_hook;
+  sk->tx_hook = ipfix_tx_connect_hook;
   sk->err_hook = ipfix_err_hook;
 
   proto->sk = sk;
 
   if (cfg->protocol == IPFIX_PROTO_UDP) {
     sk->type = SK_UDP;
-    sk_set_tbsize(sk, 512);
 
     if (sk_open(sk) < 0)
       return PS_DOWN;
     else {
-      ipfix_tx_hook(sk);
+      ipfix_tx_connect_hook(sk);
       return PS_UP;
     }
   }
@@ -160,7 +247,6 @@ static int ipfix_connect(struct ipfix_proto *proto)
     int ret;
 
     sk->type = SK_TCP;
-    sk_set_tbsize(sk, 65536);
   
     ret = sk_open(sk);
     if (ret == 0)
@@ -182,6 +268,7 @@ static struct proto *ipfix_init(struct proto_config *c)
   proto->sk = NULL;
   proto->counter_timer = NULL;
   proto->template_timer = NULL;
+  init_list(&proto->pending_packets);
 
   return p;
 }
@@ -199,6 +286,8 @@ static int ipfix_shutdown(struct proto* p)
   rfree(proto->sk);
   rfree(proto->counter_timer);
   rfree(proto->template_timer);
+
+  // TODO - Free pending packets
 
   return PS_DOWN;
 }

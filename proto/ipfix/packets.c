@@ -320,28 +320,78 @@ static inline u8 *ipfix_add_field_specifier(
   }
 }
 
-static inline u8 *ipfix_add_template_set(u8 *ptr, u8 *end)
+static inline u8 *ipfix_add_template_set(u8 *ptr, u8 *end, int *ptemplate_offset)
 {
-  u8 *set_ptr = ptr;
+  static const struct
+  {
+    u16 id;
+    u16 field_count;
+    struct
+    {
+      u16 id;
+      u16 length;
+      u16 enterprise_id;
+    } fields[16];
+  } templates[] = {
+    {
+      IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD,
+      14,
+      {
+        {IPFIX_IE_BIRD_NAME, 65535, IPFIX_ENTERPRISE_ORDBOGEN}, /* Flow key */
+        {IPFIX_IE_FLOW_DIRECTION, 1, 0}, /* Flow key */
 
+        {IPFIX_IE_BIRD_ROUTES, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_FILTERED_ROUTES, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_PREFERRED_ROUTES, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+
+        {IPFIX_IE_BIRD_UPDATES, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_INVALID_UPDATES, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_FILTERED_UPDATES, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_IGNORED_UPDATES, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_ACCEPTED_UPDATES, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+
+        {IPFIX_IE_BIRD_WITHDRAWS, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_INVALID_WITHDRAWS, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_IGNORED_WITHDRAWS, 4, IPFIX_ENTERPRISE_ORDBOGEN},
+        {IPFIX_IE_BIRD_ACCEPTED_WITHDRAWS, 4, IPFIX_ENTERPRISE_ORDBOGEN}
+      }
+    }
+  };
+  u8 *set_ptr;
+  unsigned int i;
+
+  set_ptr = ptr;
   ptr = ipfix_prepare_set(set_ptr, end, IPFIX_TEMPLATE_SET);
 
-  ptr = ipfix_add_template_record(
-      ptr,
-      end,
-      IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD,
-      3);
+  for (i = *ptemplate_offset; i != sizeof(templates) / sizeof(templates[0]); ++i) {
+    u8 *template_ptr = ptr;
+    unsigned int j;
 
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_BIRD_NAME, 65535, IPFIX_ENTERPRISE_ORDBOGEN); /* Scope */
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_BIRD_UPDATES, 4, IPFIX_ENTERPRISE_ORDBOGEN);
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_BIRD_WITHDRAWALS, 4, IPFIX_ENTERPRISE_ORDBOGEN);
+    ptr = ipfix_add_template_record(ptr, end, templates[i].id, templates[i].field_count);
+
+    for (j = 0; j != templates[i].field_count; ++j) {
+      ptr = ipfix_add_field_specifier(ptr, end,
+          templates[i].fields[j].id,
+          templates[i].fields[j].length,
+          templates[i].fields[j].enterprise_id);
+    }
+
+    if (ptr == NULL) {
+      ptr = template_ptr;
+      break;
+    }
+  }
+  if (i == sizeof(templates) / sizeof(templates[0]))
+    *ptemplate_offset = -1;
+  else
+    *ptemplate_offset = i;
 
   ipfix_finalize_set(set_ptr, ptr);
 
   return ptr;
 }
 
-static inline u8 *ipfix_add_options_template_set(u8 *ptr, u8 *end)
+static inline u8 *ipfix_add_options_template_set(u8 *ptr, u8 *end, int *poptions_template_offset)
 {
   static const struct
   {
@@ -359,7 +409,7 @@ static inline u8 *ipfix_add_options_template_set(u8 *ptr, u8 *end)
       {
         {IPFIX_IE_TEMPLATE_ID, 2, 0}, /* Scope */
         {IPFIX_IE_FLOW_KEY_INDICATOR, 4, 0} /* Really Unsigned64 */
-      }
+      }     
     },
     {
       IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_TYPE_INFO, 9, 2,
@@ -382,7 +432,8 @@ static inline u8 *ipfix_add_options_template_set(u8 *ptr, u8 *end)
   set_ptr = ptr;
   ptr = ipfix_prepare_set(set_ptr, end, IPFIX_OPTIONS_TEMPLATE_SET);
 
-  for (i = 0; i != sizeof(templates) / sizeof(templates[0]); ++i) {
+  for (i = *poptions_template_offset; i != sizeof(templates) / sizeof(templates[0]); ++i) {
+    u8 *template_ptr = ptr;
     unsigned int j;
 
     ptr = ipfix_add_options_template_record(
@@ -400,14 +451,23 @@ static inline u8 *ipfix_add_options_template_set(u8 *ptr, u8 *end)
           templates[i].records[j].length,
           templates[i].records[j].enterprise_id);
     }
+
+    if (ptr == NULL) {
+      ptr = template_ptr;
+      break;
+    }
   }
+  if (i == sizeof(templates) / sizeof(templates[0]))
+    *poptions_template_offset = -1;
+  else
+    *poptions_template_offset = i;
 
   ipfix_finalize_set(set_ptr, ptr);
 
   return ptr;
 }
 
-static inline u8 *ipfix_add_type_info_data_set(u8 *ptr, u8 *end)
+static inline u8 *ipfix_add_type_info_data_set(u8 *ptr, u8 *end, int *ptype_info_offset)
 {
   static const struct {
     u16 elementId;
@@ -428,30 +488,140 @@ static inline u8 *ipfix_add_type_info_data_set(u8 *ptr, u8 *end)
       IPFIX_UNIT_NONE,
       0,
       0,
-      "bird_name",
+      "birdName",
       "Name of BIRD protocol"
+    },
+    {
+      IPFIX_IE_BIRD_ROUTES,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_QUANTITY,
+      IPFIX_UNIT_NONE,
+      0,
+      0xFFFFFFFF,
+      "birdRoutes",
+      "Number of routes"
+    },
+    {
+      IPFIX_IE_BIRD_FILTERED_ROUTES,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_QUANTITY,
+      IPFIX_UNIT_NONE,
+      0,
+      0xFFFFFFFF,
+      "birdFilteredRoutes",
+      "Number of filtered routes"
+    },
+    {
+      IPFIX_IE_BIRD_PREFERRED_ROUTES,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_QUANTITY,
+      IPFIX_UNIT_NONE,
+      0,
+      0xFFFFFFFF,
+      "birdPreferredRoutes",
+      "Number of preferred routes"
     },
     {
       IPFIX_IE_BIRD_UPDATES,
       IPFIX_ENTERPRISE_ORDBOGEN,
       IPFIX_TYPE_UNSIGNED32,
       IPFIX_SEMANTIC_TOTAL_COUNTER,
-      IPFIX_UNIT_NONE,
+      IPFIX_UNIT_MESSAGES,
       0,
-      0,
-      "updates",
-      "Total number of route updates"
+      0xFFFFFFFF,
+      "birdUpdatesTotalCount",
+      "Number of updates"
     },
     {
-      IPFIX_IE_BIRD_WITHDRAWALS,
+      IPFIX_IE_BIRD_INVALID_UPDATES,
       IPFIX_ENTERPRISE_ORDBOGEN,
       IPFIX_TYPE_UNSIGNED32,
       IPFIX_SEMANTIC_TOTAL_COUNTER,
-      IPFIX_UNIT_NONE,
+      IPFIX_UNIT_MESSAGES,
       0,
+      0xFFFFFFFF,
+      "birdInvalidUpdatesTotalCount",
+      "Number of invalid updates"
+    },
+    {
+      IPFIX_IE_BIRD_FILTERED_UPDATES,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_TOTAL_COUNTER,
+      IPFIX_UNIT_MESSAGES,
       0,
-      "withdrawals",
-      "Total number of route withdrawls"
+      0xFFFFFFFF,
+      "birdFilteredUpdatesTotalCount",
+      "Number of filtered updates"
+    },
+    {
+      IPFIX_IE_BIRD_IGNORED_UPDATES,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_TOTAL_COUNTER,
+      IPFIX_UNIT_MESSAGES,
+      0,
+      0xFFFFFFFF,
+      "birdIgnoredUpdatesTotalCount",
+      "Number of ignored updates"
+    },
+    {
+      IPFIX_IE_BIRD_ACCEPTED_UPDATES,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_TOTAL_COUNTER,
+      IPFIX_UNIT_MESSAGES,
+      0,
+      0xFFFFFFFF,
+      "birdAcceptedUpdatesTotalCount",
+      "Number of accepted updates"
+    },
+    {
+      IPFIX_IE_BIRD_WITHDRAWS,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_TOTAL_COUNTER,
+      IPFIX_UNIT_MESSAGES,
+      0,
+      0xFFFFFFFF,
+      "birdWithdrawsTotalCount",
+      "Number of withdrawals"
+    },
+    {
+      IPFIX_IE_BIRD_INVALID_WITHDRAWS,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_TOTAL_COUNTER,
+      IPFIX_UNIT_MESSAGES,
+      0,
+      0xFFFFFFFF,
+      "birdInvalidWithdrawsTotalCount",
+      "Number of invalid withdrawals"
+    },
+    {
+      IPFIX_IE_BIRD_IGNORED_WITHDRAWS,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_TOTAL_COUNTER,
+      IPFIX_UNIT_MESSAGES,
+      0,
+      0xFFFFFFFF,
+      "birdIgnoredWithdrawsTotalCount",
+      "Number of ignored withdrawals"
+    },
+    {
+      IPFIX_IE_BIRD_ACCEPTED_WITHDRAWS,
+      IPFIX_ENTERPRISE_ORDBOGEN,
+      IPFIX_TYPE_UNSIGNED32,
+      IPFIX_SEMANTIC_TOTAL_COUNTER,
+      IPFIX_UNIT_MESSAGES,
+      0,
+      0xFFFFFFFF,
+      "birdAcceptedWithdrawsTotalCount",
+      "Number of accepted withdrawals"
     }
   };
   u8 *set_ptr;
@@ -460,8 +630,8 @@ static inline u8 *ipfix_add_type_info_data_set(u8 *ptr, u8 *end)
   set_ptr = ptr;
   ptr = ipfix_prepare_set(set_ptr, end, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_TYPE_INFO);
 
-  for (i = 0; i != sizeof(type_info) / sizeof(type_info[0]); ++i) {
-    ptr = ipfix_add_record(ptr, end,
+  for (i = *ptype_info_offset; i != sizeof(type_info) / sizeof(type_info[0]); ++i) {
+    u8 *new_ptr = ipfix_add_record(ptr, end,
         IPFIX_TYPE_UNSIGNED16, type_info[i].elementId,
         IPFIX_TYPE_UNSIGNED32, type_info[i].privateEnterpriseNumber,
         IPFIX_TYPE_UNSIGNED8, type_info[i].dataType,
@@ -473,16 +643,21 @@ static inline u8 *ipfix_add_type_info_data_set(u8 *ptr, u8 *end)
         IPFIX_TYPE_STRING, type_info[i].description,
         IPFIX_TYPE_INVALID
     );
-    if (ptr == NULL)
-      return NULL;
+    if (new_ptr == NULL)
+      break;
+    ptr = new_ptr;
   }
+  if (i == sizeof(type_info) / sizeof(type_info[0]))
+    *ptype_info_offset = -1;
+  else
+    *ptype_info_offset = i;
 
   ipfix_finalize_set(set_ptr, ptr);
 
   return ptr;
 }
 
-static inline u8 *ipfix_add_flow_key_data_set(u8 *ptr, u8 *end)
+static inline u8 *ipfix_add_flow_key_data_set(u8 *ptr, u8 *end, int *pflow_id_offset)
 {
   u8 *set_ptr = ptr;
 
@@ -490,55 +665,66 @@ static inline u8 *ipfix_add_flow_key_data_set(u8 *ptr, u8 *end)
 
   ptr = ipfix_add_record(ptr, end,
       IPFIX_TYPE_UNSIGNED16, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD,
-      IPFIX_TYPE_UNSIGNED32, 1,
+      IPFIX_TYPE_UNSIGNED32, 0x3,
       IPFIX_TYPE_INVALID
   );
 
   ipfix_finalize_set(set_ptr, ptr);
 
+  *pflow_id_offset = -1;
+
   return ptr;
 }
 
-static inline u8 *ipfix_add_options_data_set(u8 *ptr, u8 *end)
+static inline u8 *ipfix_add_options_data_set(u8 *ptr, u8 *end, int *pflow_id_offset, int *ptype_info_offset)
 {
-  ptr = ipfix_add_flow_key_data_set(ptr, end);
-  ptr = ipfix_add_type_info_data_set(ptr, end);
+  if (*pflow_id_offset != -1)
+    ptr = ipfix_add_flow_key_data_set(ptr, end, pflow_id_offset);
+
+  if (*ptype_info_offset != -1)
+    ptr = ipfix_add_type_info_data_set(ptr, end, ptype_info_offset);
+
   return ptr;
 }
 
-int ipfix_fill_template(sock *sk, u32 sequence_number)
+int ipfix_fill_template(
+    u8 *ptr,
+    u8 *end,
+    u32 sequence_number,
+    int *ptemplate_offset,
+    int *poptions_template_offset,
+    int *pflow_id_offset,
+    int *ptype_info_offset)
 {
-  /* UDP packets must not exceed 512 bytes, so neither should the template */
   u8 *header_ptr;
-  u8 *ptr;
-  u8 *end;
   
-  header_ptr = sk->tbuf;
-  end = sk->tbuf + sk->tbsize;
+  header_ptr = ptr;
   ptr = ipfix_prepare_header(header_ptr, sequence_number);
 
-  ptr = ipfix_add_template_set(ptr, end);
-  ptr = ipfix_add_options_template_set(ptr, end);
-  ptr = ipfix_add_options_data_set(ptr, end);
+  if (*ptemplate_offset != -1)
+    ptr = ipfix_add_template_set(ptr, end, ptemplate_offset);
+
+  if (*poptions_template_offset != -1)
+    ptr = ipfix_add_options_template_set(ptr, end, poptions_template_offset);
+
+  if (*pflow_id_offset != -1 || *ptype_info_offset != -1)
+    ptr = ipfix_add_options_data_set(ptr, end, pflow_id_offset, ptype_info_offset);
 
   ipfix_finalize_header(header_ptr, ptr);
 
   return ptr - header_ptr;
 }
 
-int ipfix_fill_counters(sock *sk, u32 sequence_number, int *poffset)
+int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offset)
 {
   int pos;
-  int offset = *poffset;
+  int proto_offset = *pproto_offset;
   u8 *header_ptr;
-  u8 *end;
   u8 *set_ptr;
-  u8 *ptr;
   struct proto *proto;
   int incomplete;
 
-  header_ptr = sk->tbuf;
-  end = header_ptr + sk->tbsize;
+  header_ptr = ptr;
 
   set_ptr = ipfix_prepare_header(header_ptr, sequence_number);
   ptr = ipfix_prepare_set(set_ptr, end, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD);
@@ -546,19 +732,66 @@ int ipfix_fill_counters(sock *sk, u32 sequence_number, int *poffset)
   pos = 0;
   incomplete = 0;
   WALK_LIST(proto, active_proto_list) {
-    if (pos < offset) {
-      ++pos;
+    if (!proto->cf->ipfix)
       continue;
-    }
 
-    if (proto->cf->ipfix) {
+    if (pos >= proto_offset) {
       u8 *new_ptr = ipfix_add_record(ptr, end,
           IPFIX_TYPE_STRING, proto->name,
+          IPFIX_TYPE_UNSIGNED8, IPFIX_INGRESS_FLOW,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_routes,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.filt_routes,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.pref_routes,
+
           IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_received,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_invalid,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_filtered,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_ignored,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_accepted,
+
           IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_received,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_invalid,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_ignored,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_accepted,
+
           IPFIX_TYPE_INVALID);
-      if (new_ptr == NULL)
+
+      if (new_ptr == NULL) {
+        incomplete = 1;
         break;
+      }
+
+      ptr = new_ptr;
+    }
+    
+    ++pos;
+
+    if (pos >= proto_offset) {
+      u8 *new_ptr = ipfix_add_record(ptr, end,
+          IPFIX_TYPE_STRING, proto->name,
+          IPFIX_TYPE_UNSIGNED8, IPFIX_EGRESS_FLOW,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_routes,
+          IPFIX_TYPE_UNSIGNED32, 0,
+          IPFIX_TYPE_UNSIGNED32, 0,
+
+          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_received,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_rejected,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_filtered,
+          IPFIX_TYPE_UNSIGNED32, 0,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_accepted,
+
+          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_withdraws_received,
+          IPFIX_TYPE_UNSIGNED32, 0,
+          IPFIX_TYPE_UNSIGNED32, 0,
+          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_withdraws_accepted,
+
+          IPFIX_TYPE_INVALID);
+
+      if (new_ptr == NULL) {
+        incomplete = 1;
+        break;
+      }
+
       ptr = new_ptr;
     }
 
@@ -569,9 +802,9 @@ int ipfix_fill_counters(sock *sk, u32 sequence_number, int *poffset)
   ipfix_finalize_header(header_ptr, ptr);
 
   if (incomplete)
-    *poffset = pos;
+    *pproto_offset = pos;
   else
-    *poffset = -1;
+    *pproto_offset = -1;
 
   return ptr - header_ptr;
 }

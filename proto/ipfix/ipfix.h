@@ -18,9 +18,16 @@ struct ipfix_config {
   ip_addr source;
   ip_addr dest;
   u16 port;
+  u16 mtu;
   ipfix_protocol protocol;
   int interval;
   int template_interval;
+};
+
+struct ipfix_pending_packet {
+  node n;
+  int len;
+  u8 data[];
 };
 
 struct ipfix_proto {
@@ -32,6 +39,8 @@ struct ipfix_proto {
   timer *template_timer;
 
   u32 sequence_number;
+
+  list pending_packets;
 };
 
 /* IPFIX protocol structures */
@@ -67,9 +76,6 @@ enum ipfix_set_id {
 };
 
 enum ipfix_data_set_index {
-  IPFIX_DATA_SET_INDEX_METER_STATS, /* Recommended in RFC 7011 */
-  IPFIX_DATA_SET_INDEX_METER_RELIABILITY_STATS, /* Recommended in RFC 7011 */
-  IPFIX_DATA_SET_INDEX_EXPORT_RELIABILITY_STATS, /* Recommended in RFC 7011 */
   IPFIX_DATA_SET_INDEX_FLOW_KEYS, /* Recommended in RFC 7011 */
   IPFIX_DATA_SET_INDEX_TYPE_INFO, /* Recommended in RFC 5610 */
   IPFIX_DATA_SET_INDEX_BIRD, /* BIRD specific */
@@ -133,24 +139,45 @@ typedef enum _ipfix_unit {
   IPFIX_UNIT_FRAMES = 13
 } ipfix_unit;
 
+typedef enum _ipfix_direction {
+  IPFIX_INGRESS_FLOW = 0x00,
+  IPFIX_EGRESS_FLOW = 0x01
+} ipfix_direction;
+
 typedef enum _ipfix_information_element {
-  IPFIX_IE_TEMPLATE_ID = 145,
-  IPFIX_IE_FLOW_KEY_INDICATOR = 173,
-  IPFIX_IE_INFORMATION_ELEMENT_ID = 303,
-  IPFIX_IE_INFORMATION_ELEMENT_DATA_TYPE = 339,
-  IPFIX_IE_INFORMATION_ELEMENT_DESCRIPTION = 340,
-  IPFIX_IE_INFORMATION_ELEMENT_NAME = 341,
-  IPFIX_IE_INFORMATION_ELEMENT_RANGE_BEGIN = 342,
-  IPFIX_IE_INFORMATION_ELEMENT_RANGE_END = 343,
-  IPFIX_IE_INFORMATION_ELEMENT_SEMANTICS = 344,
-  IPFIX_IE_INFORMATION_ELEMENT_UNITS = 345,
-  IPFIX_IE_PRIVATE_ENTERPRISE_NUMBER = 346
+  IPFIX_IE_FLOW_DIRECTION = 61, /* RFC 5102 */
+  IPFIX_IE_TEMPLATE_ID = 145, /* RFC 5102 */
+  IPFIX_IE_OBSERVATION_DOMAIN_ID = 149, /* RFC 5102 */
+  IPFIX_IE_FLOW_START_SECONDS = 150, /* RFC 5102 */
+  IPFIX_IE_FLOW_END_SECONDS = 151, /* RFC 5102 */
+  IPFIX_IE_FLOW_KEY_INDICATOR = 173, /* RFC 5102 */
+  IPFIX_IE_INFORMATION_ELEMENT_ID = 303, /* RFC 5477 */
+  IPFIX_IE_INFORMATION_ELEMENT_DATA_TYPE = 339, /* RFC 5610 */
+  IPFIX_IE_INFORMATION_ELEMENT_DESCRIPTION = 340, /* RFC 5610 */
+  IPFIX_IE_INFORMATION_ELEMENT_NAME = 341, /* RFC 5610 */
+  IPFIX_IE_INFORMATION_ELEMENT_RANGE_BEGIN = 342, /* RFC 5610 */
+  IPFIX_IE_INFORMATION_ELEMENT_RANGE_END = 343, /* RFC 5610 */
+  IPFIX_IE_INFORMATION_ELEMENT_SEMANTICS = 344, /* RFC 5610 */
+  IPFIX_IE_INFORMATION_ELEMENT_UNITS = 345, /* RFC 5610 */
+  IPFIX_IE_PRIVATE_ENTERPRISE_NUMBER = 346 /* RFC 5610 */
 } ipfix_informtion_element;
 
 typedef enum _ipfix_bird_information_element {
   IPFIX_IE_BIRD_NAME = 1,
-  IPFIX_IE_BIRD_UPDATES = 2,
-  IPFIX_IE_BIRD_WITHDRAWALS = 3
+  IPFIX_IE_BIRD_ROUTES = 2,
+  IPFIX_IE_BIRD_FILTERED_ROUTES = 3,
+  IPFIX_IE_BIRD_PREFERRED_ROUTES = 4,
+
+  IPFIX_IE_BIRD_UPDATES = 5,
+  IPFIX_IE_BIRD_INVALID_UPDATES = 6,
+  IPFIX_IE_BIRD_FILTERED_UPDATES = 7,
+  IPFIX_IE_BIRD_IGNORED_UPDATES = 8,
+  IPFIX_IE_BIRD_ACCEPTED_UPDATES = 9,
+
+  IPFIX_IE_BIRD_WITHDRAWS = 10,
+  IPFIX_IE_BIRD_INVALID_WITHDRAWS = 11,
+  IPFIX_IE_BIRD_IGNORED_WITHDRAWS = 12,
+  IPFIX_IE_BIRD_ACCEPTED_WITHDRAWS = 13
 } ipfix_bird_information_element;
 
 struct ipfix_template_record_header {
@@ -166,7 +193,7 @@ struct ipfix_option_template_record_header {
 
 /* Private API */
 
-int ipfix_fill_template(sock *sk, u32 sequence_number);
-int ipfix_fill_counters(sock *sk, u32 sequence_number, int *poffset);
+int ipfix_fill_template(u8 *ptr, u8 *end, u32 sequence_number, int *ptemplate_offset, int *poptions_template_offset, int *pflow_id_offset, int *ptype_info_offset);
+int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offset);
 
 #endif // _BIRD_IPFIX_H_
