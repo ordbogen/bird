@@ -229,7 +229,12 @@ static inline u8* ipfix_prepare_header(u8* ptr, u32 sequence_number)
 
 static inline void ipfix_finalize_header(u8* ptr, u8* end_of_pkt)
 {
-  struct ipfix_message_header *header = (struct ipfix_message_header *)ptr;
+  struct ipfix_message_header *header;
+
+  if (ptr == NULL || end_of_pkt == NULL)
+    return;
+
+  header = (struct ipfix_message_header *)ptr;
   header->length = htons(end_of_pkt - ptr);
 }
 
@@ -248,7 +253,12 @@ static inline u8 *ipfix_prepare_set(u8 *ptr, u8 *end, u16 set_id)
 
 static inline void ipfix_finalize_set(u8 *ptr, u8 *end_of_set)
 {
-  struct ipfix_set_header *header = (struct ipfix_set_header *)ptr;
+  struct ipfix_set_header *header;
+
+  if (ptr == NULL || end_of_set == NULL)
+    return;
+
+  header = (struct ipfix_set_header *)ptr;
   header->length = htons(end_of_set - ptr);
 }
 
@@ -313,7 +323,7 @@ static inline u8 *ipfix_add_field_specifier(
 static inline u8 *ipfix_add_template_set(u8 *ptr, u8 *end)
 {
   u8 *set_ptr = ptr;
-  
+
   ptr = ipfix_prepare_set(set_ptr, end, IPFIX_TEMPLATE_SET);
 
   ptr = ipfix_add_template_record(
@@ -331,53 +341,66 @@ static inline u8 *ipfix_add_template_set(u8 *ptr, u8 *end)
   return ptr;
 }
 
-static inline u8 *ipfix_add_flow_keys_template(u8 *ptr, u8 *end)
-{
-  ptr = ipfix_add_options_template_record(
-      ptr,
-      end,
-      IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_FLOW_KEYS,
-      2,
-      1
-  );
-
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_TEMPLATE_ID, 2, 0); /* Scope */
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_FLOW_KEY_INDICATOR, 4, 0); /* Really an Unsigned64 */
-
-  return ptr;
-}
-
-static inline u8 *ipfix_add_type_info_template(u8 *ptr, u8 *end)
-{
-  ptr = ipfix_add_options_template_record(
-      ptr,
-      end,
-      IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_TYPE_INFO,
-      9, /* Total number of field identifiers */
-      2  /* Number of scope identifiers */
-  );
-
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_INFORMATION_ELEMENT_ID, 2, 0); /* Scope */
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_PRIVATE_ENTERPRISE_NUMBER, 4, 0); /* Scope */
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_INFORMATION_ELEMENT_DATA_TYPE, 1, 0);
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_INFORMATION_ELEMENT_SEMANTICS, 1, 0);
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_INFORMATION_ELEMENT_UNITS, 1, 0);
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_INFORMATION_ELEMENT_RANGE_BEGIN, 4, 0); /* Really an Unsigned64 */
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_INFORMATION_ELEMENT_RANGE_END, 4, 0); /* Really an Unsigned64 */
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_INFORMATION_ELEMENT_NAME, 65535, 0);
-  ptr = ipfix_add_field_specifier(ptr, end, IPFIX_IE_INFORMATION_ELEMENT_DESCRIPTION, 65535, 0);
-
-  return ptr;
-}
-
 static inline u8 *ipfix_add_options_template_set(u8 *ptr, u8 *end)
 {
-  u8 *set_ptr = ptr;
-  
+  static const struct
+  {
+    u16 id;
+    u16 field_count;
+    u16 scope_field_count;
+    struct {
+      u16 id;
+      u16 length;
+      u32 enterprise_id;
+    } records[11];
+  } templates[] = {
+    {
+      IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_FLOW_KEYS, 2, 1,
+      {
+        {IPFIX_IE_TEMPLATE_ID, 2, 0}, /* Scope */
+        {IPFIX_IE_FLOW_KEY_INDICATOR, 4, 0} /* Really Unsigned64 */
+      }
+    },
+    {
+      IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_TYPE_INFO, 9, 2,
+      {
+        {IPFIX_IE_INFORMATION_ELEMENT_ID, 2, 0}, /* Scope */
+        {IPFIX_IE_PRIVATE_ENTERPRISE_NUMBER, 4, 0}, /* Scope */
+        {IPFIX_IE_INFORMATION_ELEMENT_DATA_TYPE, 1, 0},
+        {IPFIX_IE_INFORMATION_ELEMENT_SEMANTICS, 1, 0},
+        {IPFIX_IE_INFORMATION_ELEMENT_UNITS, 1, 0},
+        {IPFIX_IE_INFORMATION_ELEMENT_RANGE_BEGIN, 4, 0}, // Really Unsigned64 */
+        {IPFIX_IE_INFORMATION_ELEMENT_RANGE_END, 4, 0}, /* Really Unsigned64 */
+        {IPFIX_IE_INFORMATION_ELEMENT_NAME, 65535, 0},
+        {IPFIX_IE_INFORMATION_ELEMENT_DESCRIPTION, 65535, 0}
+      }
+    }
+  };
+  u8 *set_ptr;
+  unsigned int i;
+ 
+  set_ptr = ptr;
   ptr = ipfix_prepare_set(set_ptr, end, IPFIX_OPTIONS_TEMPLATE_SET);
 
-  ptr = ipfix_add_flow_keys_template(ptr, end);
-  ptr = ipfix_add_type_info_template(ptr, end);
+  for (i = 0; i != sizeof(templates) / sizeof(templates[0]); ++i) {
+    unsigned int j;
+
+    ptr = ipfix_add_options_template_record(
+        ptr,
+        end,
+        templates[i].id,
+        templates[i].field_count,
+        templates[i].scope_field_count);
+
+    for (j = 0; j != templates[i].field_count; ++j) {
+      ptr = ipfix_add_field_specifier(
+          ptr,
+          end,
+          templates[i].records[j].id,
+          templates[i].records[j].length,
+          templates[i].records[j].enterprise_id);
+    }
+  }
 
   ipfix_finalize_set(set_ptr, ptr);
 
@@ -466,7 +489,7 @@ static inline u8 *ipfix_add_flow_key_data_set(u8 *ptr, u8 *end)
   ptr = ipfix_prepare_set(set_ptr, end, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_FLOW_KEYS);
 
   ptr = ipfix_add_record(ptr, end,
-      IPFIX_TYPE_UNSIGNED32, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD,
+      IPFIX_TYPE_UNSIGNED16, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD,
       IPFIX_TYPE_UNSIGNED32, 1,
       IPFIX_TYPE_INVALID
   );
