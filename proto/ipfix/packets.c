@@ -652,7 +652,7 @@ int ipfix_fill_template(
   return ptr - header_ptr;
 }
 
-int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offset)
+int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offset, int reduced_template)
 {
   int pos;
   int proto_offset = *pproto_offset;
@@ -664,7 +664,11 @@ int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offse
   header_ptr = ptr;
 
   set_ptr = ipfix_prepare_header(header_ptr, sequence_number);
-  ptr = ipfix_prepare_set(set_ptr, end, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD_FULL);
+
+  if (reduced_template)
+    ptr = ipfix_prepare_set(set_ptr, end, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD_REDUCED);
+  else
+    ptr = ipfix_prepare_set(set_ptr, end, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD_FULL);
 
   pos = 0;
   incomplete = 0;
@@ -673,37 +677,56 @@ int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offse
       continue;
 
     if (pos >= proto_offset) {
-      u8 *new_ptr = ipfix_add_record(ptr, end,
-          IPFIX_TYPE_STRING, proto->name,
-          IPFIX_TYPE_UNSIGNED8, proto->proto_state,
-          IPFIX_TYPE_UNSIGNED32, proto->last_state_change,
+      u8 *new_ptr;
+      if (reduced_template) {
+        new_ptr = ipfix_add_record(ptr, end,
+            IPFIX_TYPE_STRING, proto->name,
+            IPFIX_TYPE_UNSIGNED8, proto->proto_state,
+            IPFIX_TYPE_UNSIGNED32, proto->last_state_change,
 
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_routes,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.filt_routes,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.pref_routes,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_routes,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_received,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_received,
 
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_received,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_invalid,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_filtered,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_ignored,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_accepted,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.exp_routes,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_received,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.exp_withdraws_received,
 
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_received,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_invalid,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_ignored,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_accepted,
+            IPFIX_TYPE_INVALID);
+      }
+      else {
+        new_ptr = ipfix_add_record(ptr, end,
+            IPFIX_TYPE_STRING, proto->name,
+            IPFIX_TYPE_UNSIGNED8, proto->proto_state,
+            IPFIX_TYPE_UNSIGNED32, proto->last_state_change,
 
-          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_routes,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_routes,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.filt_routes,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.pref_routes,
 
-          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_received,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_rejected,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_filtered,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_accepted,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_received,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_invalid,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_filtered,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_ignored,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_accepted,
 
-          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_withdraws_received,
-          IPFIX_TYPE_UNSIGNED32, proto->stats.exp_withdraws_accepted,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_received,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_invalid,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_ignored,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_withdraws_accepted,
 
-          IPFIX_TYPE_INVALID);
+            IPFIX_TYPE_UNSIGNED32, proto->stats.exp_routes,
+
+            IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_received,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.exp_updates_rejected,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_filtered,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_accepted,
+
+            IPFIX_TYPE_UNSIGNED32, proto->stats.exp_withdraws_received,
+            IPFIX_TYPE_UNSIGNED32, proto->stats.exp_withdraws_accepted,
+
+            IPFIX_TYPE_INVALID);
+      }
 
       if (new_ptr == NULL) {
         incomplete = 1;

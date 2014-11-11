@@ -117,7 +117,8 @@ static void ipfix_send_counters(struct ipfix_proto *proto)
         packet->data,
         packet->data + proto->cfg->mtu,
         ++proto->sequence_number,
-        &proto_offset);
+        &proto_offset,
+        proto->cfg->reduced_template);
 
     add_tail(&proto->pending_packets, &packet->n);
   }

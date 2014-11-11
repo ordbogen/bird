@@ -22,6 +22,7 @@ struct ipfix_config {
   ipfix_protocol protocol;
   int interval;
   int template_interval;
+  int reduced_template;
 };
 
 struct ipfix_pending_packet {
@@ -206,6 +207,6 @@ struct ipfix_option_template_record_header {
 /* Private API */
 
 int ipfix_fill_template(u8 *ptr, u8 *end, u32 sequence_number, int *ptemplate_offset, int *poptions_template_offset, int *pflow_id_offset, int *ptype_info_offset);
-int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offset);
+int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offset, int reduced_template);
 
 #endif // _BIRD_IPFIX_H_

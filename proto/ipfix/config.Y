@@ -14,7 +14,7 @@ CF_DEFINES
 
 CF_DECLS
 
-CF_KEYWORDS(IPFIX, PROTOCOL, SOURCE, DESTINATION, PORT, TEMPLATE, INTERVAL, TCP, UDP, SCTP, MTU)
+CF_KEYWORDS(IPFIX, PROTOCOL, SOURCE, DESTINATION, PORT, TEMPLATE, INTERVAL, TCP, UDP, SCTP, MTU, REDUCED)
 
 %type <i> ipfix_port;
 %type <i> ipfix_proto;
@@ -84,6 +84,11 @@ ipfix_mtu: expr
   IPFIX_CFG->mtu = $1;
 };
 
+ipfix_reduced: bool
+{
+  IPFIX_CFG->reduced_template = $1;
+}
+
 ipfix_proto_item:
    proto_item
  | DESTINATION ipfix_destination
@@ -92,6 +97,7 @@ ipfix_proto_item:
  | INTERVAL ipfix_interval
  | TEMPLATE INTERVAL ipfix_template_interval
  | MTU ipfix_mtu
+ | REDUCED TEMPLATE ipfix_reduced
  ;
 
 ipfix_proto_opts:
