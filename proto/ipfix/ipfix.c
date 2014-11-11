@@ -247,7 +247,7 @@ static int ipfix_connect(struct ipfix_proto *proto)
   else {
     int ret;
 
-    sk->type = SK_TCP;
+    sk->type = SK_TCP_ACTIVE;
   
     ret = sk_open(sk);
     if (ret == 0)
