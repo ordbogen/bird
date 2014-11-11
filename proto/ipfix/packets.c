@@ -215,7 +215,7 @@ static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
 }
 
 
-static inline u8* ipfix_prepare_header(u8* ptr, u32 sequence_number)
+static inline u8 *ipfix_prepare_header(u8 *ptr, u32 sequence_number)
 {
   struct ipfix_message_header *header = (struct ipfix_message_header *)ptr;
   header->version_number = htons(10);
@@ -227,7 +227,7 @@ static inline u8* ipfix_prepare_header(u8* ptr, u32 sequence_number)
   return ptr + sizeof(struct ipfix_message_header);
 }
 
-static inline void ipfix_finalize_header(u8* ptr, u8* end_of_pkt)
+static inline void ipfix_finalize_header(u8 *ptr, u8 *end_of_pkt)
 {
   struct ipfix_message_header *header;
 
