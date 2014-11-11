@@ -20,9 +20,11 @@ struct ipfix_config {
   u16 port;
   u16 mtu;
   ipfix_protocol protocol;
-  int interval;
+  u32 observation_domain_id;
+  int data_interval;
   int template_interval;
   int reduced_template;
+  int system_template;
 };
 
 struct ipfix_pending_packet {
@@ -81,7 +83,7 @@ enum ipfix_data_set_index {
   IPFIX_DATA_SET_INDEX_TYPE_INFO, /* Recommended in RFC 5610 */
   IPFIX_DATA_SET_INDEX_BIRD_FULL,
   IPFIX_DATA_SET_INDEX_BIRD_REDUCED,
-  IPFIX_DATA_SET_INDEX_BIRD_NOTIFICATION,
+  IPFIX_DATA_SET_INDEX_BIRD_SYSTEM,
 };
 
 enum ipfix_enterprise_number {
@@ -190,7 +192,11 @@ typedef enum _ipfix_bird_information_element {
   IPFIX_IE_BIRD_EXP_FILTERED_UPDATES,
   IPFIX_IE_BIRD_EXP_ACCEPTED_UPDATES,
   IPFIX_IE_BIRD_EXP_WITHDRAWS,
-  IPFIX_IE_BIRD_EXP_ACCEPTED_WITHDRAWS
+  IPFIX_IE_BIRD_EXP_ACCEPTED_WITHDRAWS,
+
+  IPFIX_IE_BIRD_USER_TIME_MILLISECONDS,
+  IPFIX_IE_BIRD_SYSTEM_TIME_MILLISECONDS,
+  IPFIX_IE_BIRD_MEMORY_USED_OCTETS
 } ipfix_bird_information_element;
 
 struct ipfix_template_record_header {
@@ -206,7 +212,23 @@ struct ipfix_option_template_record_header {
 
 /* Private API */
 
-int ipfix_fill_template(u8 *ptr, u8 *end, u32 sequence_number, int *ptemplate_offset, int *poptions_template_offset, int *pflow_id_offset, int *ptype_info_offset);
-int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offset, int reduced_template);
+int ipfix_fill_template(
+    u8 *ptr,
+    u8 *end,
+    u32 observation_domain_id,
+    u32 sequence_number,
+    int *ptemplate_offset,
+    int *poptions_template_offset,
+    int *pflow_id_offset,
+    int *ptype_info_offset);
+
+int ipfix_fill_counters(
+    u8 *ptr,
+    u8 *end,
+    u32 observation_domain_id,
+    u32 sequence_number,
+    int reduced_template,
+    int *pproto_offset,
+    int *psystem_offset);
 
 #endif // _BIRD_IPFIX_H_

@@ -14,11 +14,12 @@ CF_DEFINES
 
 CF_DECLS
 
-CF_KEYWORDS(IPFIX, PROTOCOL, SOURCE, DESTINATION, PORT, TEMPLATE, INTERVAL, TCP, UDP, SCTP, MTU, REDUCED)
+CF_KEYWORDS(IPFIX, PROTOCOL, SOURCE, DESTINATION, PORT, TEMPLATE, INTERVAL, TCP, UDP, SCTP, MTU, REDUCED, SYSTEM, OBSERVATION, DOMAIN, ID, DATA)
 
 %type <i> ipfix_port;
 %type <i> ipfix_proto;
 %type <i> ipfix_mtu;
+%type <i> ipfix_observation_domain_id;
 
 CF_GRAMMAR
 
@@ -27,9 +28,10 @@ CF_ADDTO(proto, ipfix_proto)
 ipfix_proto_start: proto_start IPFIX
 {
   this_proto = proto_config_new(&proto_ipfix, sizeof(struct ipfix_config), $1);
-  IPFIX_CFG->interval = 60;
+  IPFIX_CFG->data_interval = 60;
   IPFIX_CFG->template_interval = 600;
   IPFIX_CFG->protocol = IPFIX_PROTO_UDP;
+  IPFIX_CFG->system_template = 1;
 };
 
 ipfix_port:
@@ -67,8 +69,8 @@ ipfix_protocol: ipfix_proto
 
 ipfix_interval: expr
 {
-  IPFIX_CFG->interval = $1;
-  if (IPFIX_CFG->interval <= 0 )
+  IPFIX_CFG->data_interval = $1;
+  if (IPFIX_CFG->data_interval <= 0 )
     cf_error("Invalid interval");
 };
 
@@ -84,20 +86,32 @@ ipfix_mtu: expr
   IPFIX_CFG->mtu = $1;
 };
 
-ipfix_reduced: bool
+ipfix_reduced_template: bool
 {
   IPFIX_CFG->reduced_template = $1;
-}
+};
+
+ipfix_system_template: bool
+{
+  IPFIX_CFG->system_template = $1;
+};
+
+ipfix_observation_domain_id: expr
+{
+  IPFIX_CFG->observation_domain_id = $1;
+};
 
 ipfix_proto_item:
    proto_item
  | DESTINATION ipfix_destination
  | SOURCE ipfix_source
  | PROTOCOL ipfix_protocol
- | INTERVAL ipfix_interval
+ | DATA INTERVAL ipfix_interval
  | TEMPLATE INTERVAL ipfix_template_interval
  | MTU ipfix_mtu
- | REDUCED TEMPLATE ipfix_reduced
+ | REDUCED TEMPLATE ipfix_reduced_template
+ | SYSTEM TEMPLATE ipfix_system_template
+ | OBSERVATION DOMAIN ID ipfix_observation_domain_id
  ;
 
 ipfix_proto_opts:

@@ -94,6 +94,7 @@ static void ipfix_send_templates(struct ipfix_proto *proto)
     packet->len = ipfix_fill_template(
         packet->data,
         packet->data + proto->cfg->mtu,
+        proto->cfg->observation_domain_id,
         ++proto->sequence_number,
         &template_offset,
         &option_template_offset,
@@ -111,6 +112,7 @@ static void ipfix_send_templates(struct ipfix_proto *proto)
 static void ipfix_send_counters(struct ipfix_proto *proto)
 {
   int proto_offset = 0;
+  int system_offset = 0;
 
   DBG("ipfix_send_counters()\n");
 
@@ -128,9 +130,11 @@ static void ipfix_send_counters(struct ipfix_proto *proto)
     packet->len = ipfix_fill_counters(
         packet->data,
         packet->data + proto->cfg->mtu,
+        proto->cfg->observation_domain_id,
         ++proto->sequence_number,
+        proto->cfg->reduced_template,
         &proto_offset,
-        proto->cfg->reduced_template);
+        &system_offset);
 
     add_tail(&proto->pending_packets, &packet->n);
   }
@@ -147,7 +151,7 @@ static void ipfix_counter_timer_hook(struct timer *t)
 
   ipfix_send_counters(proto);
 
-  tm_start(t, proto->cfg->interval);
+  tm_start(t, proto->cfg->data_interval);
 }
 
 static void ipfix_template_timer_hook(struct timer *t)
@@ -178,7 +182,7 @@ static void ipfix_init_timers(struct ipfix_proto *proto)
         0,
         0);
 
-    tm_start(proto->counter_timer, proto->cfg->interval);
+    tm_start(proto->counter_timer, proto->cfg->data_interval);
     tm_start(proto->template_timer, proto->cfg->template_interval);
   }
 }
