@@ -251,15 +251,21 @@ static inline u8 *ipfix_prepare_set(u8 *ptr, u8 *end, u16 set_id)
   return ptr + sizeof(struct ipfix_set_header);
 }
 
-static inline void ipfix_finalize_set(u8 *ptr, u8 *end_of_set)
+static inline u8 *ipfix_finalize_set(u8 *ptr, u8 *end_of_set)
 {
   struct ipfix_set_header *header;
 
   if (ptr == NULL || end_of_set == NULL)
-    return;
+    return NULL;
+
+  while (((uintptr_t)end_of_set & 0x3) != 0) {
+    *end_of_set++ = 0;
+  }
 
   header = (struct ipfix_set_header *)ptr;
   header->length = htons(end_of_set - ptr);
+
+  return end_of_set;
 }
 
 static inline u8 *ipfix_add_template_record(
@@ -386,7 +392,7 @@ static inline u8 *ipfix_add_template_set(u8 *ptr, u8 *end, int *ptemplate_offset
   else
     *ptemplate_offset = i;
 
-  ipfix_finalize_set(set_ptr, ptr);
+  ptr = ipfix_finalize_set(set_ptr, ptr);
 
   return ptr;
 }
@@ -462,7 +468,7 @@ static inline u8 *ipfix_add_options_template_set(u8 *ptr, u8 *end, int *poptions
   else
     *poptions_template_offset = i;
 
-  ipfix_finalize_set(set_ptr, ptr);
+  ptr = ipfix_finalize_set(set_ptr, ptr);
 
   return ptr;
 }
@@ -652,7 +658,7 @@ static inline u8 *ipfix_add_type_info_data_set(u8 *ptr, u8 *end, int *ptype_info
   else
     *ptype_info_offset = i;
 
-  ipfix_finalize_set(set_ptr, ptr);
+  ptr = ipfix_finalize_set(set_ptr, ptr);
 
   return ptr;
 }
@@ -669,7 +675,7 @@ static inline u8 *ipfix_add_flow_key_data_set(u8 *ptr, u8 *end, int *pflow_id_of
       IPFIX_TYPE_INVALID
   );
 
-  ipfix_finalize_set(set_ptr, ptr);
+  ptr = ipfix_finalize_set(set_ptr, ptr);
 
   *pflow_id_offset = -1;
 
@@ -798,7 +804,7 @@ int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offse
     ++pos;
   }
 
-  ipfix_finalize_set(set_ptr, ptr);
+  ptr = ipfix_finalize_set(set_ptr, ptr);
   ipfix_finalize_header(header_ptr, ptr);
 
   if (incomplete)
