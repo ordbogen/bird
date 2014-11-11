@@ -522,28 +522,28 @@ static inline u8 *ipfix_add_type_info_data_set(u8 *ptr, u8 *end, int *ptype_info
     const char *name;
     const char *description;
   } type_info[] = {
-    {IPFIX_IE_BIRD_NAME,                   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_STRING,     IPFIX_SEMANTIC_DEFAULT,       IPFIX_UNIT_NONE,     0,       0,          "birdName",                              "Name of BIRD protocol"},
-    {IPFIX_IE_BIRD_PROTOCOL_STATE,         IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED8,  IPFIX_SEMANTIC_DEFAULT,       IPFIX_UNIT_NONE,     PS_DOWN, PS_STOP,    "birdProtocolState",                     "State of protocol (0=down, 1=start, 2=up, 3=stop)"},
-    {IPFIX_IE_BIRD_LAST_STATE_CHANGE,      IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_SECONDS,  0,       0xFFFFFFFF, "birdLastStateChange",                   "Number of seconds since last state change"},
-    {IPFIX_IE_BIRD_IMP_ROUTES,             IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdImportRoutes",                      "Routes imported"},
-    {IPFIX_IE_BIRD_IMP_FILTERED_ROUTES,    IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdImportFilteredRoutes",              "Filtered routes imported"},
-    {IPFIX_IE_BIRD_IMP_PREFERRED_ROUTES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdImportPreferredRoutes",             "Preferred routes imported"},
-    {IPFIX_IE_BIRD_IMP_UPDATES,            IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportUpdatesTotalCount",           "Updates imported"},
-    {IPFIX_IE_BIRD_IMP_INVALID_UPDATES,    IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportInvalidUpdatesTotalCount",    "Invalid updates"},
-    {IPFIX_IE_BIRD_IMP_FILTERED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportFilteredUpdatesTotalCount",   "Filtered updates imported"},
-    {IPFIX_IE_BIRD_IMP_IGNORED_UPDATES,    IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportIgnoredUpdatesTotalCount",    "Ignored updates imported"},
-    {IPFIX_IE_BIRD_IMP_ACCEPTED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportAcceptedUpdatesTotalCount",   "Accepted updates imported"},
-    {IPFIX_IE_BIRD_IMP_WITHDRAWS,          IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportWithdrawsTotalCount",         "Withdrawals imported"},
-    {IPFIX_IE_BIRD_IMP_INVALID_WITHDRAWS,  IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportInvalidWithdrawsTotalCount",  "Invalid withdrawals imported"},
-    {IPFIX_IE_BIRD_IMP_IGNORED_WITHDRAWS,  IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportIgnoredWithdrawsTotalCount",  "Ignored withdrawals imported"},
-    {IPFIX_IE_BIRD_IMP_ACCEPTED_WITHDRAWS, IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportAcceptedWithdrawsTotalCount", "Accepted withdrawals imported"},
-    {IPFIX_IE_BIRD_EXP_ROUTES,             IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdExportRoutes",                      "Routes exported"},
-    {IPFIX_IE_BIRD_EXP_UPDATES,            IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportUpdatesTotalCount",           "Updates exported"},
-    {IPFIX_IE_BIRD_EXP_REJECTED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportInvalidUpdatesTotalCount",    "Invalid updates"},
-    {IPFIX_IE_BIRD_EXP_FILTERED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportFilteredUpdatesTotalCount",   "Filtered updates exported"},
-    {IPFIX_IE_BIRD_EXP_ACCEPTED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportAcceptedUpdatesTotalCount",   "Accepted updates exported"},
-    {IPFIX_IE_BIRD_EXP_WITHDRAWS,          IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportWithdrawsTotalCount",         "Withdrawals exported"},
-    {IPFIX_IE_BIRD_EXP_ACCEPTED_WITHDRAWS, IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportAcceptedWithdrawsTotalCount", "Accepted withdrawals exported"},
+    {IPFIX_IE_BIRD_NAME,                   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_STRING,            IPFIX_SEMANTIC_DEFAULT,       IPFIX_UNIT_NONE,     0,       0,          "birdName",                              "Name of BIRD protocol"},
+    {IPFIX_IE_BIRD_PROTOCOL_STATE,         IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED8,         IPFIX_SEMANTIC_DEFAULT,       IPFIX_UNIT_NONE,     PS_DOWN, PS_STOP,    "birdProtocolState",                     "State of protocol (0=down, 1=start, 2=up, 3=stop)"},
+    {IPFIX_IE_BIRD_LAST_STATE_CHANGE,      IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_DATE_TIME_SECONDS, IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdLastStateChange",                   "Timestamp of last state change"},
+    {IPFIX_IE_BIRD_IMP_ROUTES,             IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdImportRoutes",                      "Routes imported"},
+    {IPFIX_IE_BIRD_IMP_FILTERED_ROUTES,    IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdImportFilteredRoutes",              "Filtered routes imported"},
+    {IPFIX_IE_BIRD_IMP_PREFERRED_ROUTES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdImportPreferredRoutes",             "Preferred routes imported"},
+    {IPFIX_IE_BIRD_IMP_UPDATES,            IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportUpdatesTotalCount",           "Updates imported"},
+    {IPFIX_IE_BIRD_IMP_INVALID_UPDATES,    IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportInvalidUpdatesTotalCount",    "Invalid updates"},
+    {IPFIX_IE_BIRD_IMP_FILTERED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportFilteredUpdatesTotalCount",   "Filtered updates imported"},
+    {IPFIX_IE_BIRD_IMP_IGNORED_UPDATES,    IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportIgnoredUpdatesTotalCount",    "Ignored updates imported"},
+    {IPFIX_IE_BIRD_IMP_ACCEPTED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportAcceptedUpdatesTotalCount",   "Accepted updates imported"},
+    {IPFIX_IE_BIRD_IMP_WITHDRAWS,          IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportWithdrawsTotalCount",         "Withdrawals imported"},
+    {IPFIX_IE_BIRD_IMP_INVALID_WITHDRAWS,  IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportInvalidWithdrawsTotalCount",  "Invalid withdrawals imported"},
+    {IPFIX_IE_BIRD_IMP_IGNORED_WITHDRAWS,  IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportIgnoredWithdrawsTotalCount",  "Ignored withdrawals imported"},
+    {IPFIX_IE_BIRD_IMP_ACCEPTED_WITHDRAWS, IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdImportAcceptedWithdrawsTotalCount", "Accepted withdrawals imported"},
+    {IPFIX_IE_BIRD_EXP_ROUTES,             IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_NONE,     0,       0xFFFFFFFF, "birdExportRoutes",                      "Routes exported"},
+    {IPFIX_IE_BIRD_EXP_UPDATES,            IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportUpdatesTotalCount",           "Updates exported"},
+    {IPFIX_IE_BIRD_EXP_REJECTED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportInvalidUpdatesTotalCount",    "Invalid updates"},
+    {IPFIX_IE_BIRD_EXP_FILTERED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportFilteredUpdatesTotalCount",   "Filtered updates exported"},
+    {IPFIX_IE_BIRD_EXP_ACCEPTED_UPDATES,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportAcceptedUpdatesTotalCount",   "Accepted updates exported"},
+    {IPFIX_IE_BIRD_EXP_WITHDRAWS,          IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportWithdrawsTotalCount",         "Withdrawals exported"},
+    {IPFIX_IE_BIRD_EXP_ACCEPTED_WITHDRAWS, IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,        IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES, 0,       0xFFFFFFFF, "birdExportAcceptedWithdrawsTotalCount", "Accepted withdrawals exported"},
   };
   u8 *set_ptr;
   unsigned int i;
@@ -678,11 +678,14 @@ int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offse
 
     if (pos >= proto_offset) {
       u8 *new_ptr;
+      bird_clock_t delta = now - proto->last_state_change;
+      bird_clock_t t = now_real - delta;
+
       if (reduced_template) {
         new_ptr = ipfix_add_record(ptr, end,
             IPFIX_TYPE_STRING, proto->name,
             IPFIX_TYPE_UNSIGNED8, proto->proto_state,
-            IPFIX_TYPE_UNSIGNED32, proto->last_state_change,
+            IPFIX_TYPE_DATE_TIME_SECONDS, (unsigned int)t,
 
             IPFIX_TYPE_UNSIGNED32, proto->stats.imp_routes,
             IPFIX_TYPE_UNSIGNED32, proto->stats.imp_updates_received,
@@ -698,7 +701,7 @@ int ipfix_fill_counters(u8 *ptr, u8 *end, u32 sequence_number, int *pproto_offse
         new_ptr = ipfix_add_record(ptr, end,
             IPFIX_TYPE_STRING, proto->name,
             IPFIX_TYPE_UNSIGNED8, proto->proto_state,
-            IPFIX_TYPE_UNSIGNED32, proto->last_state_change,
+            IPFIX_TYPE_DATE_TIME_SECONDS, (unsigned int)t,
 
             IPFIX_TYPE_UNSIGNED32, proto->stats.imp_routes,
             IPFIX_TYPE_UNSIGNED32, proto->stats.filt_routes,
