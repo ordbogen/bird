@@ -268,6 +268,7 @@ static struct proto *ipfix_init(struct proto_config *c)
   proto->sk = NULL;
   proto->counter_timer = NULL;
   proto->template_timer = NULL;
+  proto->sequence_number = random_u32();
   init_list(&proto->pending_packets);
 
   return p;
