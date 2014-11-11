@@ -15,6 +15,7 @@
 
 static int ipfix_connect(struct ipfix_proto *proto);
 static void ipfix_flush_queue(struct ipfix_proto *proto);
+static int ipfix_shutdown(struct proto* p);
 
 static void ipfix_tx_hook(sock *sk)
 {
@@ -40,7 +41,7 @@ static void ipfix_tx_hook(sock *sk)
 
 static void ipfix_flush_queue(struct ipfix_proto *proto)
 {
-  DBG("IPFIX: ipfix_flush_queue\n");
+  DBG("ipfix_flush_queue()\n");
 
   if (proto->sk->tx_hook != NULL)
     return;
@@ -56,28 +57,35 @@ static void ipfix_flush_queue(struct ipfix_proto *proto)
     else
       ret = sk_send_to(proto->sk, packet->len, proto->cfg->dest, proto->cfg->port);
 
-    if (ret < 0)
-    {
+    if (ret == 0) {
       proto->sk->tx_hook = ipfix_tx_hook;
       return;
     }
+    else if (ret <= 0)
+      return;
 
     rem_node(&packet->n);
     mb_free(packet);
-    
+
     sk_set_tbuf(proto->sk, NULL);
   }
 }
 
 static void ipfix_send_templates(struct ipfix_proto *proto)
 {
-  DBG("IPFIX: Sending template\n");
-
   int template_offset = 0;
   int option_template_offset = 0;
   int flow_id_offset = 0;
   int type_info_offset = 0;
   int count = 0;
+
+  DBG("ipfix_send_templates()\n");
+
+  if (proto->sk == NULL)
+  {
+    if (ipfix_connect(proto) == 0)
+      return;
+  }
 
   while (template_offset != -1 || option_template_offset != -1 || flow_id_offset != -1 ||  type_info_offset != -1) {
     struct ipfix_pending_packet *packet;
@@ -97,16 +105,20 @@ static void ipfix_send_templates(struct ipfix_proto *proto)
     ++count;
   }
 
-  DBG("IPFIX: Added %i templates to queue\n", count);
-
   ipfix_flush_queue(proto);
 }
 
 static void ipfix_send_counters(struct ipfix_proto *proto)
 {
-  DBG("IPFIX: Sending counters\n");
-
   int proto_offset = 0;
+
+  DBG("ipfix_send_counters()\n");
+
+  if (proto->sk == NULL)
+  {
+    if (ipfix_connect(proto) != PS_UP)
+      return;
+  }
 
   while (proto_offset != -1)
   {
@@ -131,12 +143,7 @@ static void ipfix_counter_timer_hook(struct timer *t)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)t->data;
 
-  DBG("IPFIX: Counter timer\n");
-
-  if (proto->sk == NULL) {
-    if (ipfix_connect(proto) != PS_UP)
-      return;
-  }
+  DBG("ipfix_counter_timer_hook()\n");
 
   ipfix_send_counters(proto);
 
@@ -147,12 +154,7 @@ static void ipfix_template_timer_hook(struct timer *t)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)t->data;
 
-  DBG("IPFIX: Template timer\n");
-
-  if (proto->sk == NULL) {
-    if (ipfix_connect(proto) != PS_UP)
-      return;
-  }
+  DBG("ipfix_template_timer_hook()\n");
 
   ipfix_send_templates(proto);
 
@@ -176,8 +178,6 @@ static void ipfix_init_timers(struct ipfix_proto *proto)
         0,
         0);
 
-    ipfix_send_templates(proto);
-
     tm_start(proto->counter_timer, proto->cfg->interval);
     tm_start(proto->template_timer, proto->cfg->template_interval);
   }
@@ -189,14 +189,15 @@ static void ipfix_tx_connect_hook(sock *sk)
 
   struct ipfix_proto *proto;
 
-  DBG("IPFIX: Connected\n");
+  DBG("ipfix_tx_connect_hook()\n");
 
   sk->tx_hook = NULL;
 
   proto = (struct ipfix_proto *)sk->data;
   proto_notify_state(&proto->p, PS_UP);
 
-  ipfix_init_timers(proto);
+  ipfix_send_templates(proto);
+  ipfix_send_counters(proto);
 }
 
 static void ipfix_err_hook(sock *sk, int err)
@@ -205,14 +206,13 @@ static void ipfix_err_hook(sock *sk, int err)
 
   struct ipfix_proto *proto;
 
-  DBG("IPFIX: Error (%d)\n", err);
+  DBG("ipfix_err_hook(%d)\n", err);
+
+  sk->err_hook = NULL;
+  sk->tx_hook = NULL;
 
   proto = (struct ipfix_proto *)sk->data;
-  proto->sk = NULL;
-
-  /* Terminate socket, but attempt to reconnect at next interval */
-  rfree(sk);
-
+  ipfix_shutdown(&proto->p);
   proto_notify_state(&proto->p, PS_DOWN);
 }
 
@@ -221,7 +221,7 @@ static int ipfix_connect(struct ipfix_proto *proto)
   struct ipfix_config *cfg = proto->cfg;
   sock *sk;
 
-  DBG("IPFIX: Connecting\n");
+  DBG("ipfix_connect()\n");
 
   sk = sk_new(proto->p.pool);
   sk->data = proto;
@@ -238,24 +238,19 @@ static int ipfix_connect(struct ipfix_proto *proto)
     sk->type = SK_UDP;
 
     if (sk_open(sk) < 0)
-      return PS_DOWN;
+      return 0;
     else {
       ipfix_tx_connect_hook(sk);
-      return PS_UP;
+      return 1;
     }
   }
   else {
-    int ret;
-
     sk->type = SK_TCP_ACTIVE;
   
-    ret = sk_open(sk);
-    if (ret == 0)
-      return PS_START;
-    else if (ret < 0)
-      return PS_DOWN;
+    if (sk_open(sk) == 0)
+      return 1;
     else
-      return PS_UP;
+      return 0;
   }
 }
 
@@ -264,6 +259,8 @@ static struct proto *ipfix_init(struct proto_config *c)
   struct proto *p = proto_new(c, sizeof(struct ipfix_proto));
   struct ipfix_config *cfg = (struct ipfix_config *)c;
   struct ipfix_proto *proto = (struct ipfix_proto *)p;
+
+  DBG("ipfix_init()\n");
 
   proto->cfg = cfg;
   proto->sk = NULL;
@@ -278,16 +275,28 @@ static struct proto *ipfix_init(struct proto_config *c)
 static int ipfix_start(struct proto *p)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)p;
-  return ipfix_connect(proto);
+
+  DBG("ipfix_start()\n");
+
+  ipfix_init_timers(proto);
+
+  return PS_START;
 }
 
 static int ipfix_shutdown(struct proto* p)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)p;
 
+  DBG("ipfix_shutdown()\n");
+
   rfree(proto->sk);
+  proto->sk = NULL;
+
   rfree(proto->counter_timer);
+  proto->counter_timer = NULL;
+
   rfree(proto->template_timer);
+  proto->template_timer = NULL;
 
   // TODO - Free pending packets
 
