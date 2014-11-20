@@ -31,12 +31,36 @@
 
 static int ipfix_connect(struct ipfix_proto *proto);
 static void ipfix_flush_queue(struct ipfix_proto *proto);
-static int ipfix_shutdown(struct proto* p);
+
+static struct ipfix_packet *ipfix_new_packet(struct ipfix_proto *proto)
+{
+  struct ipfix_packet *packet;
+  if (!EMPTY_LIST(proto->unused_packets))
+  {
+    packet = (struct ipfix_packet *)HEAD(proto->unused_packets);
+    rem2_node(&packet->n);
+  }
+  else {
+    packet = (struct ipfix_packet *)mb_alloc(proto->p.pool, sizeof(*packet) + proto->cfg->mtu);
+  }
+
+  return packet;
+}
+
+static inline void ipfix_discard_packet(struct ipfix_proto *proto, struct ipfix_packet *packet)
+{
+  rem2_node(&packet->n);
+  add_head(&proto->unused_packets, &packet->n);
+}
+
+static inline void ipfix_queue_packet(struct ipfix_proto *proto, struct ipfix_packet *packet)
+{
+  add_tail(&proto->pending_packets, &packet->n);
+}
 
 static void ipfix_tx_hook(sock *sk)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)sk->data;
-  struct ipfix_pending_packet *packet;
 
   DBG("IPFIX: ipfix_tx_hook\n");
 
@@ -45,10 +69,7 @@ static void ipfix_tx_hook(sock *sk)
   if (EMPTY_LIST(proto->pending_packets))
     return;
 
-  packet = HEAD(proto->pending_packets);
-
-  rem_node(&packet->n);
-  mb_free(packet);
+  ipfix_discard_packet(proto, (struct ipfix_packet *)HEAD(proto->pending_packets));
   
   sk_set_tbuf(sk, NULL);
 
@@ -63,7 +84,7 @@ static void ipfix_flush_queue(struct ipfix_proto *proto)
     return;
 
   while (!EMPTY_LIST(proto->pending_packets)) {
-    struct ipfix_pending_packet *packet = HEAD(proto->pending_packets);
+    struct ipfix_packet *packet = (struct ipfix_packet *)HEAD(proto->pending_packets);
     int ret;
 
     sk_set_tbuf(proto->sk, &packet->data);
@@ -80,8 +101,7 @@ static void ipfix_flush_queue(struct ipfix_proto *proto)
     else if (ret <= 0)
       return;
 
-    rem_node(&packet->n);
-    mb_free(packet);
+    ipfix_discard_packet(proto, packet);
 
     sk_set_tbuf(proto->sk, NULL);
   }
@@ -104,9 +124,9 @@ static void ipfix_send_templates(struct ipfix_proto *proto)
   }
 
   while (template_offset != -1 || option_template_offset != -1 || flow_id_offset != -1 ||  type_info_offset != -1) {
-    struct ipfix_pending_packet *packet;
+    struct ipfix_packet *packet;
 
-    packet = (struct ipfix_pending_packet *)mb_alloc(proto->p.pool, sizeof(*packet) + proto->cfg->mtu);
+    packet = ipfix_new_packet(proto);
     packet->len = ipfix_fill_template(
         packet->data,
         packet->data + proto->cfg->mtu,
@@ -117,7 +137,7 @@ static void ipfix_send_templates(struct ipfix_proto *proto)
         &flow_id_offset,
         &type_info_offset);
 
-    add_tail(&proto->pending_packets, &packet->n);
+    ipfix_queue_packet(proto, packet);
 
     ++count;
   }
@@ -140,9 +160,9 @@ static void ipfix_send_counters(struct ipfix_proto *proto)
 
   while (proto_offset != -1)
   {
-    struct ipfix_pending_packet *packet;
+    struct ipfix_packet *packet;
 
-    packet = (struct ipfix_pending_packet *)mb_alloc(proto->p.pool, sizeof(*packet) + proto->cfg->mtu);
+    packet = ipfix_new_packet(proto);
     packet->len = ipfix_fill_counters(
         packet->data,
         packet->data + proto->cfg->mtu,
@@ -152,7 +172,7 @@ static void ipfix_send_counters(struct ipfix_proto *proto)
         &proto_offset,
         &system_offset);
 
-    add_tail(&proto->pending_packets, &packet->n);
+    ipfix_queue_packet(proto, packet);
   }
 
   ipfix_flush_queue(proto);
@@ -191,6 +211,10 @@ static void ipfix_init_timers(struct ipfix_proto *proto)
         0,
         0);
 
+    tm_start(proto->counter_timer, proto->cfg->data_interval);
+  }
+
+  if (proto->cfg->protocol != IPFIX_PROTO_TCP) {
     proto->template_timer = tm_new_set(
         proto->p.pool,
         ipfix_template_timer_hook,
@@ -198,7 +222,6 @@ static void ipfix_init_timers(struct ipfix_proto *proto)
         0,
         0);
 
-    tm_start(proto->counter_timer, proto->cfg->data_interval);
     tm_start(proto->template_timer, proto->cfg->template_interval);
   }
 }
@@ -232,7 +255,6 @@ static void ipfix_err_hook(sock *sk, int err)
   sk->tx_hook = NULL;
 
   proto = (struct ipfix_proto *)sk->data;
-  ipfix_shutdown(&proto->p);
   proto_notify_state(&proto->p, PS_DOWN);
 }
 
@@ -288,6 +310,7 @@ static struct proto *ipfix_init(struct proto_config *c)
   proto->template_timer = NULL;
   proto->sequence_number = random_u32();
   init_list(&proto->pending_packets);
+  init_list(&proto->unused_packets);
 
   return p;
 }
@@ -303,26 +326,6 @@ static int ipfix_start(struct proto *p)
   return PS_START;
 }
 
-static int ipfix_shutdown(struct proto* p)
-{
-  struct ipfix_proto *proto = (struct ipfix_proto *)p;
-
-  DBG("ipfix_shutdown()\n");
-
-  rfree(proto->sk);
-  proto->sk = NULL;
-
-  rfree(proto->counter_timer);
-  proto->counter_timer = NULL;
-
-  rfree(proto->template_timer);
-  proto->template_timer = NULL;
-
-  // TODO - Free pending packets
-
-  return PS_DOWN;
-}
-
 static void ipfix_copy_config(struct proto_config *dest, struct proto_config *src)
 {
   /* Shallow copy of everything */
@@ -334,6 +337,5 @@ struct protocol proto_ipfix = {
   .template =     "ipfix%d",
   .init =         ipfix_init,
   .start =        ipfix_start,
-  .shutdown =     ipfix_shutdown,
   .copy_config =  ipfix_copy_config
 };

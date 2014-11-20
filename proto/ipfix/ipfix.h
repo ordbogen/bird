@@ -27,7 +27,7 @@ struct ipfix_config {
   int system_template;
 };
 
-struct ipfix_pending_packet {
+struct ipfix_packet {
   node n;
   int len;
   u8 data[];
@@ -44,6 +44,7 @@ struct ipfix_proto {
   u32 sequence_number;
 
   list pending_packets;
+  list unused_packets;
 };
 
 /* IPFIX protocol structures */
