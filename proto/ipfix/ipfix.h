@@ -145,17 +145,9 @@ typedef enum _ipfix_unit {
   IPFIX_UNIT_FRAMES = 13
 } ipfix_unit;
 
-typedef enum _ipfix_direction {
-  IPFIX_INGRESS_FLOW = 0x00,
-  IPFIX_EGRESS_FLOW = 0x01
-} ipfix_direction;
-
 typedef enum _ipfix_information_element {
-  IPFIX_IE_FLOW_DIRECTION = 61, /* RFC 5102 */
   IPFIX_IE_TEMPLATE_ID = 145, /* RFC 5102 */
   IPFIX_IE_OBSERVATION_DOMAIN_ID = 149, /* RFC 5102 */
-  IPFIX_IE_FLOW_START_SECONDS = 150, /* RFC 5102 */
-  IPFIX_IE_FLOW_END_SECONDS = 151, /* RFC 5102 */
   IPFIX_IE_FLOW_KEY_INDICATOR = 173, /* RFC 5102 */
   IPFIX_IE_INFORMATION_ELEMENT_ID = 303, /* RFC 5477 */
   IPFIX_IE_INFORMATION_ELEMENT_DATA_TYPE = 339, /* RFC 5610 */
