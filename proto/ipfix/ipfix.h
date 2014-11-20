@@ -231,4 +231,4 @@ int ipfix_fill_counters(
     int *pproto_offset,
     int *psystem_offset);
 
-#endif // _BIRD_IPFIX_H_
+#endif /* _BIRD_IPFIX_H_ */
