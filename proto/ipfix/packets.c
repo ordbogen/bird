@@ -5,12 +5,12 @@
  */
 #include "nest/bird.h"
 #include "nest/protocol.h"
+#include "lib/resource.h"
 #include "lib/socket.h"
 #include "lib/timer.h"
 
 #include "ipfix.h"
 
-#include <malloc.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -765,10 +765,8 @@ static u8 *ipfix_add_system_counters(u8 *ptr, u8 *end, u32 observation_domain_id
 {
   u8 *set_ptr;
   struct rusage usage;
-  struct mallinfo meminfo;
 
   getrusage(RUSAGE_SELF, &usage);
-  meminfo = mallinfo();
 
   set_ptr = ptr;
   ptr = ipfix_prepare_set(set_ptr, end, IPFIX_DATA_SET_BASE + IPFIX_DATA_SET_INDEX_BIRD_SYSTEM);
@@ -777,7 +775,7 @@ static u8 *ipfix_add_system_counters(u8 *ptr, u8 *end, u32 observation_domain_id
       IPFIX_TYPE_UNSIGNED32, observation_domain_id,
       IPFIX_TYPE_UNSIGNED32, usage.ru_utime.tv_sec * 1000 + usage.ru_utime.tv_usec / 1000,
       IPFIX_TYPE_UNSIGNED32, usage.ru_stime.tv_sec * 1000 + usage.ru_stime.tv_usec / 1000,
-      IPFIX_TYPE_UNSIGNED32, meminfo.uordblks,
+      IPFIX_TYPE_UNSIGNED32, rmemsize(&root_pool),
       IPFIX_TYPE_INVALID);
 
   ptr = ipfix_finalize_set(set_ptr, ptr);
