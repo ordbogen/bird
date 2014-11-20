@@ -4,6 +4,22 @@
  *  Can be freely distributed and used under the terms of the GNU GPL
  */
 
+/**
+ * DOC: IP Flow Information Export
+ *
+ * The IPFIX protocol is implemented in two files: |ipfix.c| handles the
+ * overall protocol and scheduling of IPFIX packets, !packets! handles
+ * encoding of IPFIX packets,
+ *
+ * The IPFIX protocol is essentially just a couple of timers, handling
+ * template retransmission and data transmission respectively.
+ *
+ * IPFIX in BIRD can run over either UDP or TCP. The consequence of this
+ * is that we must handle whatever MTU the underlying protocol restrict
+ * us to. When we want to send either the templates or the data, we
+ * generate all the packets and then starts flushing the queue.
+ */
+
 #define LOCAL_DEBUG
 
 #include "nest/bird.h"
