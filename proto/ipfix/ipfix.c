@@ -326,6 +326,18 @@ static int ipfix_start(struct proto *p)
   return PS_START;
 }
 
+static int ipfix_reconfigure(struct proto *p, struct proto_config *c)
+{
+  struct ipfix_proto *proto = (struct ipfix_proto *)p;
+
+  DBG("ipfix_reconfigure()\n");
+
+  return (memcmp(
+        (byte *)proto->cfg + sizeof(struct proto_config),
+        (byte *)c + sizeof(struct proto_config),
+        sizeof(struct ipfix_config) - sizeof(struct proto_config)) == 0);
+}
+
 static void ipfix_copy_config(struct proto_config *dest, struct proto_config *src)
 {
   /* Shallow copy of everything */
@@ -337,5 +349,6 @@ struct protocol proto_ipfix = {
   .template =     "ipfix%d",
   .init =         ipfix_init,
   .start =        ipfix_start,
+  .reconfigure =  ipfix_reconfigure,
   .copy_config =  ipfix_copy_config
 };
