@@ -47,6 +47,37 @@ static inline u8 *ipfix_add_string(u8 *ptr, u8 *end, const char *string)
   return ipfix_add_octet_array(ptr, end, string, strlen(string));
 }
 
+/* IPFIX to C data types:
+
+   IPFIX_TYPE_OCTET_ARRAY = const void *, int
+   IPFIX_TYPE_UNSIGNED8 = unsigned int
+   IPFIX_TYPE_UNSIGNED16 = unsigned int
+   IPFIX_TYPE_UNSIGNED32 = unsigned int
+   IPFIX_TYPE_UNSIGNED64 = u64
+   IPFIX_TYPE_SIGNED8 = int
+   IPFIX_TYPE_SINGED16 = int
+   IPFIX_TYPE_SIGNED32 = int
+   IPFIX_TYPE_SIGNED64 = s64
+   IPFIX_TYPE_BOOLEAN = int
+   IPFIX_TYPE_MAC_ADDRESS = const void *
+   IPFIX_TYPE_STRING = const char*
+   IPFIX_TYPE_DATE_TIME_SECONDS = unsigned int
+   IPFIX_TYPE_DATE_TIME_MILLISECONDS = u64
+   IPFIX_TYPE_DATA_TIME_MICROSECONDS = unsigned int, unsigned int
+   IPFIX_TYPE_DATE_TIME_NANOSECONDS = unsigned int, unsigned int
+   IPFIX_TYPE_IPV4_ADDRESS = const ipv4_addr *
+   IPFIX_TYPE_IPV6_ADDRESS = const ipv6_addr *
+
+   Types not supported:
+   IPFIX_TYPE_FLOAT32 = float (Need reliable way to convert to big endian IEEE binary32)
+   IPFIX_TYPE_FLOAT64 = double (Need reliable way to convert to big endian IEEE binary64)
+   IPFIX_TYPE_BASIC_LIST
+   IPFIX_TYPE_SUB_TEMPLATE_LIST
+   IPFIX_TYPE_SUB_TEMPLATE_MULTI_LIST
+
+   Last type must be:
+   IPFIX_TYPE_INVALID
+*/
 static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
 {
   va_list args;
@@ -69,8 +100,9 @@ static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
         break;
 
       case IPFIX_TYPE_UNSIGNED16:
-        if (ptr + 2 > end)
+        if (ptr + 2 > end) {
           ptr = NULL;
+        }
         else {
           *(u16 *)ptr = htons(va_arg(args, unsigned int));
           ptr += 2;
@@ -78,8 +110,9 @@ static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
         break;
 
       case IPFIX_TYPE_UNSIGNED32:
-        if (ptr + 4 > end)
+        if (ptr + 4 > end) {
           ptr = NULL;
+        }
         else {
           *(u32 *)ptr = htonl(va_arg(args, unsigned int));
           ptr += 4;
@@ -87,11 +120,16 @@ static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
         break;
 
       case IPFIX_TYPE_UNSIGNED64:
-        if (ptr + 8 > end)
+      case IPFIX_TYPE_DATE_TIME_MILLISECONDS:
+        if (ptr + 8 > end) {
           ptr = NULL;
+        }
         else {
-          // TODO
-          ptr += 8;
+          u64 val = va_arg(args, u64);
+          *(u32 *)ptr = htonl(val > 32);
+          ptr += 4;
+          *(u32 *)ptr = htonl(val & 0xFFFFFFFF);
+          ptr += 4;
         }
         break;
 
@@ -101,8 +139,9 @@ static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
         break;
 
       case IPFIX_TYPE_SIGNED16:
-        if (ptr + 2 > end)
+        if (ptr + 2 > end) {
           ptr = NULL;
+        }
         else {
           *(u16 *)ptr = htons(va_arg(args, int));
           ptr += 2;
@@ -110,8 +149,9 @@ static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
         break;
 
       case IPFIX_TYPE_SIGNED32:
-        if (ptr + 4 > end)
+        if (ptr + 4 > end) {
           ptr = NULL;
+        }
         else {
           *(u32 *)ptr = htonl(va_arg(args, int));
           ptr += 4;
@@ -119,40 +159,31 @@ static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
         break;
 
       case IPFIX_TYPE_SIGNED64:
-        if (ptr + 8 > end)
+        if (ptr + 8 > end) {
           ptr = NULL;
-        else {
-          // TODO
-          ptr += 8;
         }
-        break;
-
-
-      case IPFIX_TYPE_FLOAT32:
-        if (ptr + 4 > end)
-          ptr = NULL;
         else {
-          // TODO
+          s64 val = va_arg(args, s64);
+          *(u32 *)ptr = htonl((val >> 32) & 0xFFFFFFFF);
+          ptr += 4;
+          *(u32 *)ptr = htonl(val & 0xFFFFFFFF);
           ptr += 4;
         }
         break;
 
-      case IPFIX_TYPE_FLOAT64:
-        if (ptr + 8 > end)
-          ptr = NULL;
-        else {
-          // TODO
-          ptr += 8;
-        }
-        break;
-
       case IPFIX_TYPE_BOOLEAN:
-        *(u8 *)ptr = (va_arg(args, int) ? 1 : 0);
+        *(u8 *)ptr = (va_arg(args, int) ? 1 : 2);
         ++ptr;
         break;
 
       case IPFIX_TYPE_MAC_ADDRESS:
-        // TODO
+        if (ptr + 6 > end) {
+          ptr = NULL;
+        }
+        else {
+          memcpy(ptr, va_arg(args, const void *), 6);
+          ptr += 6;
+        }
         break;
 
       case IPFIX_TYPE_STRING:
@@ -160,55 +191,60 @@ static u8 *ipfix_add_record(u8 *ptr, u8 *end, ...)
         break;
 
       case IPFIX_TYPE_DATE_TIME_SECONDS:
-        if (ptr + 4 > end)
+        if (ptr + 4 > end) {
           ptr = NULL;
+        }
         else {
           *(u32 *)ptr = htonl(va_arg(args, unsigned int));
           ptr += 4;
         }
         break;
 
-      case IPFIX_TYPE_DATE_TIME_MILLISECONDS:
       case IPFIX_TYPE_DATE_TIME_MICROSECONDS:
       case IPFIX_TYPE_DATE_TIME_NANOSECONDS:
-        if (ptr + 8 > end)
+        if (ptr + 8 > end) {
           return NULL;
+        }
         else {
-          // TODO
-          ptr += 8;
+          *(u32 *)ptr = htonl(va_arg(args, unsigned int)); /* Seconds */
+          ptr += 4;
+          *(u32 *)ptr = htonl(va_arg(args, unsigned int)); /* Fraction */
+          ptr += 4;
         }
         break;
 
       case IPFIX_TYPE_IPV4_ADDRESS:
-        if (ptr + 4 > end)
+        if (ptr + 4 > end) {
           return NULL;
+        }
         else {
-          // TODO
+          memcpy(ptr, va_arg(args, const void *), 4);
           ptr += 4;
         }
         break;
 
       case IPFIX_TYPE_IPV6_ADDRESS:
-        if (ptr + 16 > end)
+        if (ptr + 16 > end) {
           return NULL;
+        }
         else {
-          // TODO
+          memcpy(ptr, va_arg(args, const void *), 16);
           ptr += 16;
         }
-        break;
-
-      case IPFIX_TYPE_BASIC_LIST:
-        break;
-
-      case IPFIX_TYPE_SUB_TEMPLATE_LIST:
-        break;
-
-      case IPFIX_TYPE_SUB_TEMPLATE_MULTI_LIST:
         break;
 
       case IPFIX_TYPE_INVALID:
         va_end(args);
         return ptr;
+
+      case IPFIX_TYPE_FLOAT32:
+      case IPFIX_TYPE_FLOAT64:
+      case IPFIX_TYPE_BASIC_LIST:
+      case IPFIX_TYPE_SUB_TEMPLATE_LIST:
+      case IPFIX_TYPE_SUB_TEMPLATE_MULTI_LIST:
+      default:
+        va_end(args);
+        return NULL;
     }
   }
 
