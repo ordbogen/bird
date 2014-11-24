@@ -463,7 +463,12 @@ cli_init_unix(uid_t use_uid, gid_t use_gid)
   s->type = SK_UNIX_PASSIVE;
   s->rx_hook = cli_connect;
   s->rbsize = 1024;
-  sk_open_unix(s, path_control_socket);
+
+  /* Return value intentionally ignored */
+  unlink(path_control_socket);
+
+  if (sk_open_unix(s, path_control_socket) < 0)
+    die("Cannot create control socket %s: %m", path_control_socket);
 
   if (use_uid || use_gid)
     if (chown(path_control_socket, use_uid, use_gid) < 0)
@@ -602,7 +607,7 @@ signal_init(void)
  *	Parsing of command-line arguments
  */
 
-static char *opt_list = "c:dD:ps:P:u:g:f";
+static char *opt_list = "c:dD:ps:P:u:g:fR";
 static int parse_and_exit;
 char *bird_name;
 static char *use_user;
@@ -612,7 +617,7 @@ static int run_in_foreground = 0;
 static void
 usage(void)
 {
-  fprintf(stderr, "Usage: %s [-c <config-file>] [-d] [-D <debug-file>] [-p] [-s <control-socket>] [-P <pid-file>] [-u <user>] [-g <group>] [-f]\n", bird_name);
+  fprintf(stderr, "Usage: %s [-c <config-file>] [-d] [-D <debug-file>] [-p] [-s <control-socket>] [-P <pid-file>] [-u <user>] [-g <group>] [-f] [-R]\n", bird_name);
   exit(1);
 }
 
@@ -723,6 +728,9 @@ parse_args(int argc, char **argv)
       case 'f':
 	run_in_foreground = 1;
 	break;
+      case 'R':
+	graceful_restart_recovery();
+	break;
       default:
 	usage();
       }
@@ -804,6 +812,8 @@ main(int argc, char **argv)
   signal_init();
 
   config_commit(conf, RECONFIG_HARD, 0);
+
+  graceful_restart_init();
 
 #ifdef LOCAL_DEBUG
   async_dump_flag = 1;

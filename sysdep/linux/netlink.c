@@ -104,9 +104,9 @@ nl_request_dump(int cmd)
   req.nh.nlmsg_type = cmd;
   req.nh.nlmsg_len = sizeof(req);
   req.nh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
-  /* Is it important which PF_* is used for link-level interface scan?
-     It seems that some information is available only when PF_INET is used. */
-  req.g.rtgen_family = (cmd == RTM_GETLINK) ? PF_INET : BIRD_PF;
+  /* Is it important which AF_* is used for link-level interface scan?
+     It seems that some information is available only when AF_INET is used. */
+  req.g.rtgen_family = (cmd == RTM_GETLINK) ? AF_INET : BIRD_AF;
   nl_send(&nl_scan, &req.nh);
 }
 
@@ -151,7 +151,7 @@ nl_get_reply(struct nl_sock *nl)
     }
 }
 
-static struct rate_limit rl_netlink_err;
+static struct tbf rl_netlink_err = TBF_DEFAULT_LOG_LIMITS;
 
 static int
 nl_error(struct nlmsghdr *h)
@@ -437,12 +437,16 @@ nl_parse_link(struct nlmsghdr *h, int scan)
 	f.flags |= IF_MULTIACCESS | IF_BROADCAST | IF_MULTICAST;
       else
 	f.flags |= IF_MULTIACCESS;	/* NBMA */
-      if_update(&f);
+
+      ifi = if_update(&f);
+
+      if (!scan)
+	if_end_partial_update(ifi);
     }
 }
 
 static void
-nl_parse_addr(struct nlmsghdr *h)
+nl_parse_addr(struct nlmsghdr *h, int scan)
 {
   struct ifaddrmsg *i;
   struct rtattr *a[IFA_ANYCAST+1];
@@ -542,10 +546,14 @@ nl_parse_addr(struct nlmsghdr *h)
       ifi->index, ifi->name,
       new ? "added" : "removed",
       ifa.ip, ifa.flags, ifa.prefix, ifa.pxlen, ifa.brd, ifa.opposite);
+
   if (new)
     ifa_update(&ifa);
   else
     ifa_delete(&ifa);
+
+  if (!scan)
+    if_end_partial_update(ifi);
 }
 
 void
@@ -565,7 +573,7 @@ kif_do_scan(struct kif_proto *p UNUSED)
   nl_request_dump(RTM_GETADDR);
   while (h = nl_get_scan())
     if (h->nlmsg_type == RTM_NEWADDR || h->nlmsg_type == RTM_DELADDR)
-      nl_parse_addr(h);
+      nl_parse_addr(h, 1);
     else
       log(L_DEBUG "nl_scan_ifaces: Unknown packet received (type=%d)", h->nlmsg_type);
 
@@ -967,7 +975,7 @@ nl_async_msg(struct nlmsghdr *h)
     case RTM_NEWADDR:
     case RTM_DELADDR:
       DBG("KRT: Received async address notification (%d)\n", h->nlmsg_type);
-      nl_parse_addr(h);
+      nl_parse_addr(h, 0);
       break;
     default:
       DBG("KRT: Received unknown async notification (%d)\n", h->nlmsg_type);
@@ -1061,7 +1069,7 @@ nl_open_async(void)
   sk->type = SK_MAGIC;
   sk->rx_hook = nl_async_hook;
   sk->fd = fd;
-  if (sk_open(sk))
+  if (sk_open(sk) < 0)
     bug("Netlink: sk_open failed");
 }
 

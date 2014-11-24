@@ -477,7 +477,14 @@ bfd_remove_session(struct bfd_proto *p, struct bfd_session *s)
 {
   ip_addr ip = s->addr;
 
+  /* Caller should ensure that request list is empty */
+
   birdloop_enter(p->loop);
+
+  /* Remove session from notify list if scheduled for notification */
+  /* No need for bfd_lock_sessions(), we are already protected by birdloop_enter() */
+  if (NODE_VALID(&s->n))
+    rem_node(&s->n);
 
   bfd_free_iface(s->ifa);
 
@@ -1055,7 +1062,7 @@ bfd_copy_config(struct proto_config *dest, struct proto_config *src)
   // struct bfd_config *s = (struct bfd_config *) src;
 
   /* We clean up patt_list and neigh_list, neighbors and ifaces are non-sharable */
-  init_list(&d->patt_list);  
+  init_list(&d->patt_list);
   init_list(&d->neigh_list);
 }
 
@@ -1064,7 +1071,7 @@ bfd_show_sessions(struct proto *P)
 {
   byte tbuf[TM_DATETIME_BUFFER_SIZE];
   struct bfd_proto *p = (struct bfd_proto *) P;
-  uint state, diag;
+  uint state, diag UNUSED;
   u32 tx_int, timeout;
   const char *ifname;
 
