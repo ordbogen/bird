@@ -457,6 +457,8 @@ to zero to disable it. An empty <cf><m/switch/</cf> is equivalent to <cf/on/
 	<cf/events/ for events internal to the protocol and
 	<cf/packets/ for packets sent and received by the protocol. Default: off.
 
+	<tag>ipfix <m/switch/</tag> Export protocol statistics thorugh IPFIX. Note that IPFIX protocol also has to be configured.
+
 	<tag>mrtdump all|off|{ states, messages }</tag>
 	Set protocol MRTdump flags. MRTdump is a standard binary
 	format for logging information from routing protocols and
@@ -2024,6 +2026,20 @@ protocol direct {
 	interface "-arc*", "*";		# Exclude the ARCnets
 }
 </code>
+
+<sect><label id="sect-ipfix">IPFIX
+
+<sect1>Introduction
+
+<p>IP Flow Information Export (IPFIX) is not a routing protocol itself. In fact IPFIX
+was originally intended as a non-proprietary version of Netflow or sFlow, which
+primarily exports information about IP flows. Eventually the protocol turned out to
+be quite efficient as a generic push protocol, pushing events or performance metrics,
+using minimal computation power and bandwidth. The IPFIX implementation in BIRD only
+exports statistics and performance metrics.
+
+<p>BIRD exports the metrics through a series of enterprise specific information
+elements.
 
 <sect>Kernel
 
