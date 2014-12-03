@@ -584,8 +584,8 @@ static inline u8 *ipfix_add_type_info_data_set(u8 *ptr, u8 *end, int *ptype_info
     {IPFIX_IE_BIRD_EXP_ACCEPTED_UPDATES,     IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,             IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES,     0,       0xFFFFFFFF, "birdExportAcceptedUpdatesTotalCount",   "Accepted updates exported"},
     {IPFIX_IE_BIRD_EXP_WITHDRAWS,            IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,             IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES,     0,       0xFFFFFFFF, "birdExportWithdrawsTotalCount",         "Withdrawals exported"},
     {IPFIX_IE_BIRD_EXP_ACCEPTED_WITHDRAWS,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,             IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MESSAGES,     0,       0xFFFFFFFF, "birdExportAcceptedWithdrawsTotalCount", "Accepted withdrawals exported"},
-    {IPFIX_IE_BIRD_SYSTEM_TIME_MILLISECONDS, IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_DATE_TIME_MILLISECONDS, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MILLISECONDS, 0,       0xFFFFFFFF, "birdSystemTimeMilliseconds",            "CPU time used in system time"},
-    {IPFIX_IE_BIRD_USER_TIME_MILLISECONDS,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_DATE_TIME_MILLISECONDS, IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MILLISECONDS, 0,       0xFFFFFFFF, "birdUserTimeMilliseconds",              "CPU time used in user time"},
+    {IPFIX_IE_BIRD_SYSTEM_TIME_MILLISECONDS, IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED64,             IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MILLISECONDS, 0,       0xFFFFFFFF, "birdSystemTimeMilliseconds",            "CPU time used in system time"},
+    {IPFIX_IE_BIRD_USER_TIME_MILLISECONDS,   IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED64,             IPFIX_SEMANTIC_TOTAL_COUNTER, IPFIX_UNIT_MILLISECONDS, 0,       0xFFFFFFFF, "birdUserTimeMilliseconds",              "CPU time used in user time"},
     {IPFIX_IE_BIRD_MEMORY_USED_OCTETS,       IPFIX_ENTERPRISE_ORDBOGEN, IPFIX_TYPE_UNSIGNED32,             IPFIX_SEMANTIC_QUANTITY,      IPFIX_UNIT_OCTETS,       0,       0xFFFFFFFF, "birdMemoryUsedOctets",                  "Memory used in octets"}
   };
   u8 *set_ptr;
