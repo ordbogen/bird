@@ -34,6 +34,8 @@ static void ipfix_flush_queue(struct ipfix_proto *proto);
 
 static struct ipfix_packet *ipfix_new_packet(struct ipfix_proto *proto)
 {
+  DBG("ipfix_new_packet()\n");
+
   struct ipfix_packet *packet;
   if (!EMPTY_LIST(proto->unused_packets))
   {
@@ -49,12 +51,16 @@ static struct ipfix_packet *ipfix_new_packet(struct ipfix_proto *proto)
 
 static inline void ipfix_discard_packet(struct ipfix_proto *proto, struct ipfix_packet *packet)
 {
+  DBG("ipfix_discard_packet()\n");
+
   rem2_node(&packet->n);
   add_head(&proto->unused_packets, &packet->n);
 }
 
 static inline void ipfix_queue_packet(struct ipfix_proto *proto, struct ipfix_packet *packet)
 {
+  DBG("ipfix_queue_packet()\n");
+
   add_tail(&proto->pending_packets, &packet->n);
 }
 
@@ -62,7 +68,7 @@ static void ipfix_tx_hook(sock *sk)
 {
   struct ipfix_proto *proto = (struct ipfix_proto *)sk->data;
 
-  DBG("IPFIX: ipfix_tx_hook\n");
+  DBG("ipfix_tx_hook()\n");
 
   sk->tx_hook = NULL;
 
@@ -80,7 +86,7 @@ static void ipfix_flush_queue(struct ipfix_proto *proto)
 {
   DBG("ipfix_flush_queue()\n");
 
-  if (proto->sk->tx_hook != NULL)
+  if (proto->sk == NULL && ipfix_connect(proto) != 0)
     return;
 
   while (!EMPTY_LIST(proto->pending_packets)) {
@@ -98,7 +104,7 @@ static void ipfix_flush_queue(struct ipfix_proto *proto)
       proto->sk->tx_hook = ipfix_tx_hook;
       return;
     }
-    else if (ret <= 0)
+    else if (ret < 0)
       return;
 
     ipfix_discard_packet(proto, packet);
@@ -116,12 +122,6 @@ static void ipfix_send_templates(struct ipfix_proto *proto)
   int count = 0;
 
   DBG("ipfix_send_templates()\n");
-
-  if (proto->sk == NULL)
-  {
-    if (ipfix_connect(proto) == 0)
-      return;
-  }
 
   while (template_offset != -1 || option_template_offset != -1 || flow_id_offset != -1 ||  type_info_offset != -1) {
     struct ipfix_packet *packet;
@@ -151,12 +151,6 @@ static void ipfix_send_counters(struct ipfix_proto *proto)
   int system_offset = 0;
 
   DBG("ipfix_send_counters()\n");
-
-  if (proto->sk == NULL)
-  {
-    if (ipfix_connect(proto) != PS_UP)
-      return;
-  }
 
   while (proto_offset != -1)
   {
@@ -203,6 +197,8 @@ static void ipfix_template_timer_hook(struct timer *t)
 
 static void ipfix_init_timers(struct ipfix_proto *proto)
 {
+  DBG("ipfix_init_timers()\n");
+
   if (proto->counter_timer == NULL) {
     proto->counter_timer = tm_new_set(
         proto->p.pool,
@@ -251,10 +247,8 @@ static void ipfix_err_hook(sock *sk, int err)
 
   DBG("ipfix_err_hook(%d)\n", err);
 
-  sk->err_hook = NULL;
-  sk->tx_hook = NULL;
-
   proto = (struct ipfix_proto *)sk->data;
+
   proto_notify_state(&proto->p, PS_DOWN);
 }
 
@@ -279,11 +273,12 @@ static int ipfix_connect(struct ipfix_proto *proto)
   if (cfg->protocol == IPFIX_PROTO_UDP) {
     sk->type = SK_UDP;
 
-    if (sk_open(sk) < 0)
-      return 0;
-    else {
+    if (sk_open(sk) == 0) {
       ipfix_tx_connect_hook(sk);
       return 1;
+    }
+    else {
+      return 0;
     }
   }
   else {
@@ -305,12 +300,6 @@ static struct proto *ipfix_init(struct proto_config *c)
   DBG("ipfix_init()\n");
 
   proto->cfg = cfg;
-  proto->sk = NULL;
-  proto->counter_timer = NULL;
-  proto->template_timer = NULL;
-  proto->sequence_number = random_u32();
-  init_list(&proto->pending_packets);
-  init_list(&proto->unused_packets);
 
   return p;
 }
@@ -320,6 +309,13 @@ static int ipfix_start(struct proto *p)
   struct ipfix_proto *proto = (struct ipfix_proto *)p;
 
   DBG("ipfix_start()\n");
+
+  proto->sk = NULL;
+  proto->counter_timer = NULL;
+  proto->template_timer = NULL;
+  proto->sequence_number = random_u32();
+  init_list(&proto->pending_packets);
+  init_list(&proto->unused_packets);
 
   ipfix_init_timers(proto);
 
