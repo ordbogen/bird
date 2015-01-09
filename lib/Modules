@@ -32,3 +32,5 @@ event.h
 checksum.c
 checksum.h
 alloca.h
+snmp.h
+snmp.c
