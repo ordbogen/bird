@@ -261,6 +261,9 @@ static u8 *snmp_encode_object_identifier(u8 *ptr, u8 *end, const snmp_object_ide
   return ptr;
 }
 
+/* Encode an IP address as per SNMPv2-SMI
+
+   SNMP really only supports IPv4 addresses. */
 static u8 *snmp_encode_ip_address(u8 *ptr, u8 *end, const ip_addr *ip)
 {
   if (ptr + 6 >= end)
@@ -356,53 +359,9 @@ static u8 *snmp_encode_varbind(u8 *ptr, u8 *end, const snmp_object_identifier *n
   return ptr;
 }
 
-/**
- * snmp_encode_notification - Encode SNMP notification message
- * @buffer: Buffer to store the notification in
- * @buffer_size: Size of buffer. Should be at least 484 bytes
- * @community: SNMPv2c community name
- * @notification: Notification identifier
- *
- * Generates an SNMP notification with a series of SNMP values.
- *
- * You specify the values in name-type-value pairs. The first two
- * arguments are const snmp_object_identifier *, and snmp_value_type
- * respectively. The type of the third argument depends on the type.
- * Octet strings has a fouth argument with the size of the string.
- * -1 denotes zero-terminated string.
- *
- * The types (and their respective arguments) are:
- *
- * SNMP_INTEGER (int)
- *
- * SNMP_OCTET_STRING (const void *, int)
- *
- * SNMP_OCTET_IDENTIFIER (const snmp_object_identifier *)
- *
- * SNMP_IP_ADDRESS (const ip_addr *)
- *
- * SNMP_COUNTER32 (unsigned int)
- *
- * SNMP_UNSIGNED32 (unsigned int)
- *
- * SNMP_TIME_TICKS (unsigned int)
- *
- * The function returns the size of the SNMP message and 0 on error
- */
-unsigned int snmp_encode_notification(void *buffer, unsigned int buffer_size, const char *community, const snmp_object_identifier *notification, ...)
-{
-  va_list args;
-  unsigned int ret;
+/* Encode a SNMP notification
 
-  va_start(args, notification);
-
-  ret = snmp_encode_notificationv(buffer, buffer_size, community, notification, args);
-
-  va_end(args);
-
-  return ret;
-}
-
+   Returns the size of the notification in octets or 0 if buffer is too small. */
 unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, const char *community, const snmp_object_identifier *notification, va_list args)
 {
   /*

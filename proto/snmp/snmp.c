@@ -6,11 +6,12 @@
 
 #include "snmp.h"
 
-struct snmp_cfg *snmp_cf = NULL;
-struct snmp_proto *snmp_instance = NULL;
+struct snmp_cfg *snmp_cf = NULL; /* Configuration singleton */
+struct snmp_proto *snmp_instance = NULL; /* Instance singleton */
 
 static void snmp_flush_queue(struct snmp_proto *snmp);
 
+/* Triggered when a blocking transmit has completed */
 static void snmp_tx_hook(sock *socket)
 {
   struct snmp_proto *snmp = (struct snmp_proto *)socket->data;
@@ -25,12 +26,14 @@ static void snmp_tx_hook(sock *socket)
   snmp_flush_queue(snmp);
 }
 
+/* Triggered when a network error occured */
 static void snmp_err_hook(sock *socket, int err)
 {
   struct snmp_proto *snmp = (struct snmp_proto *)socket->data;
   log(L_ERR "%s: Socket error: %s (%i)", snmp->p.name, strerror(err), err);
 }
 
+/* Get or create a UDP socket */
 static sock *snmp_get_socket(struct snmp_proto *snmp)
 {
   if (snmp->socket == NULL) {
@@ -52,6 +55,7 @@ static sock *snmp_get_socket(struct snmp_proto *snmp)
   return snmp->socket;
 }
 
+/* Transmit as many SNMP notifications from the queue as possible */
 static void snmp_flush_queue(struct snmp_proto *snmp)
 {
   while (!EMPTY_LIST(snmp->payload_list)) {
@@ -87,6 +91,7 @@ static void snmp_flush_queue(struct snmp_proto *snmp)
   }
 }
 
+/* Triggered at some time after a notification has been queued */
 static void snmp_event_hook(void *data)
 {
   struct snmp_proto *snmp = (struct snmp_proto *)data;
@@ -132,28 +137,46 @@ static int snmp_shutdown(struct proto *proto)
   }
 }
 
+/* Add notification to transmit queue
+
+   See snmp_send_notification for description of the va_list arguments. */
 void snmp_enqueue_notificationv(struct snmp_proto *snmp, const snmp_object_identifier *notification, va_list args)
 {
   const struct snmp_config *cfg = (const struct snmp_config *)snmp->p.cf;
   const struct snmp_destination *dest;
   int need_schedule = 0;
+  const struct snmp_payload *default_payload = NULL;
 
   WALK_LIST(dest, cfg->destinations) {
     struct snmp_payload *payload = (struct snmp_payload *)sl_alloc(snmp->payload_slab);
-    const char *community = (dest->community == NULL ? cfg->community : dest->community);
-    payload->size = snmp_encode_notificationv(payload->data, sizeof(payload->data), community, notification, args);
-    if (payload->size == 0) {
-      log(L_WARN "%s: Notification exceeded limits", snmp->p.name);
-      sl_free(snmp->payload_slab, payload);
+
+    if (dest->community == NULL && default_payload != NULL) {
+      /* We are using default community, so the packets are identical */
+      payload->size = default_payload->size;
+      memcpy(payload->data, default_payload->data, default_payload->size);
     }
     else {
-      payload->addr = dest->addr;
+      /* We are using non-default community or this is the first destination */
+      const char *community = (dest->community == NULL ? cfg->community : dest->community);
 
-      if (EMPTY_LIST(snmp->payload_list))
-        need_schedule = 1;
+      payload->size = snmp_encode_notificationv(payload->data, sizeof(payload->data), community, notification, args);
+      if (payload->size == 0) {
+        log(L_WARN "%s: Notification exceeded buffer limits", snmp->p.name);
+        sl_free(snmp->payload_slab, payload);
+        continue;
+      }
 
-      add_tail(&snmp->payload_list, &payload->n);
+      /* Set us as default packet if default community */
+      if (dest->community == NULL)
+        default_payload = payload;
     }
+
+    payload->addr = dest->addr;
+
+    if (EMPTY_LIST(snmp->payload_list))
+      need_schedule = 1;
+
+    add_tail(&snmp->payload_list, &payload->n);
   }
 
   if (need_schedule)
