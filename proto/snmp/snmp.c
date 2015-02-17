@@ -102,12 +102,16 @@ static int snmp_start(struct proto *proto)
   init_list(&snmp->payload_list);
   snmp->terminating = 0;
 
+  snmp_instance = snmp;
+
   return PS_UP;
 }
 
 static int snmp_shutdown(struct proto *proto)
 {
   struct snmp_proto *snmp = (struct snmp_proto *)proto;
+
+  snmp_instance = NULL;
 
   if (EMPTY_LIST(snmp->payload_list)) {
     return PS_DOWN;
