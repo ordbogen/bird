@@ -75,6 +75,7 @@
 #include "lib/socket.h"
 #include "lib/resource.h"
 #include "lib/string.h"
+#include "nest/snmp.h"
 
 #include "bgp.h"
 
@@ -346,13 +347,114 @@ bgp_stop(struct bgp_proto *p, unsigned subcode)
   ev_schedule(p->event);
 }
 
+enum bgp_snmp_state
+{
+  BGP_SNMP_STATE_IDLE = 1,
+  BGP_SNMP_STATE_CONNECT = 2,
+  BGP_SNMP_STATE_ACTIVE = 3,
+  BGP_SNMP_STATE_OPENSENT = 4,
+  BGP_SNMP_STATE_OPENCONFIRM = 5,
+  BGP_SNMP_STATE_ESTABLISHED = 6
+};
+
+static unsigned int snmp_connection_states[BS_MAX] = {
+  BGP_SNMP_STATE_IDLE, /* BS_IDLE */
+  BGP_SNMP_STATE_CONNECT, /* BS_CONNECT */
+  BGP_SNMP_STATE_ACTIVE, /* BS_ACTIVE */
+  BGP_SNMP_STATE_OPENSENT, /* BS_OPENSENT */
+  BGP_SNMP_STATE_OPENCONFIRM, /* BS_OPENCONFIRM */
+  BGP_SNMP_STATE_ESTABLISHED /* BS_ESTABLISHED */
+};
+
+#ifdef IPV6
+
+static inline void
+bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
+{
+  /*
+    BGP4-MIB does not support IPv6
+    BGP4V2-MIB supports IPv6, but was never finalized
+  */
+}
+
+#else /* IPV6 */
+
+static void
+bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
+{
+  /*
+    iso(1) org(3) dod(6) internet(1) mgmt(2) mib-2(1) bgp(15) bgpNotification(0)
+      bgpEstablishedNotification(1)
+      bgpBackwardTransNotification(2)
+  */
+  static const snmp_object_identifier bgp_established_notification[] =    SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 15, 0, 1);
+  static const snmp_object_identifier bgp_backward_trans_notification[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 15, 0, 2);
+
+  /*
+    iso(1) org(3) dod(6) internet(1) mgmt(2) mib-2(1) bgp(15) bgpPeerTable(3) bgpPeerEntry(1)
+      bgpPeerRemoteAddr(7) (IpAddress)
+      bgpPeerLastError(14) (OCTET STRING (2))
+      bgpPeerState(2) (INTEGER)
+  */
+  static snmp_object_identifier bgp_peer_remote_addr[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 15, 3, 1, 7,  4, 0, 0, 0, 0);
+  static snmp_object_identifier bgp_peer_last_error[] =  SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 15, 3, 1, 14, 4, 0, 0, 0, 0);
+  static snmp_object_identifier bgp_peer_state[] =       SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 15, 3, 1, 2,  4, 0, 0, 0, 0);
+
+  struct bgp_proto *bgp = conn->bgp;
+  struct bgp_config *cfg = bgp->cf;
+
+  u32 ip;
+  u8 error[2];
+
+  if (!cfg->c.snmp)
+    return;
+
+  ip = ipa_to_u32(cfg->remote_ip);
+
+  bgp_peer_remote_addr[11] = (ip >> 24) & 0xFF;
+  bgp_peer_remote_addr[12] = (ip >> 16) & 0xFF;
+  bgp_peer_remote_addr[13] = (ip >> 8) & 0xFF;
+  bgp_peer_remote_addr[14] = ip & 0xFF;
+
+  bgp_peer_last_error[11] = (ip >> 24) & 0xFF;
+  bgp_peer_last_error[12] = (ip >> 16) & 0xFF;
+  bgp_peer_last_error[13] = (ip >> 8) & 0xFF;
+  bgp_peer_last_error[14] = ip & 0xFF;
+
+  bgp_peer_state[11] = (ip >> 24) & 0xFF;
+  bgp_peer_state[12] = (ip >> 16) & 0xFF;
+  bgp_peer_state[13] = (ip >> 8) & 0xFF;
+  bgp_peer_state[14] = ip & 0xFF;
+
+  error[0] = bgp->last_error_class;
+  error[1] = bgp->last_error_code;
+
+  snmp_send_notification(
+    (state == BGP_SNMP_STATE_ESTABLISHED ? bgp_established_notification : bgp_backward_trans_notification),
+    bgp_peer_remote_addr, SNMP_IP_ADDRESS, &cfg->remote_ip,
+    bgp_peer_last_error, SNMP_OCTET_STRING, error, 2,
+    bgp_peer_state, SNMP_INTEGER, state,
+    NULL
+  );
+}
+
+#endif /* IPV6 */
+
 static inline void
 bgp_conn_set_state(struct bgp_conn *conn, unsigned new_state)
 {
+  enum bgp_snmp_state old_snmp_state = snmp_connection_states[conn->state];
+  enum bgp_snmp_state new_snmp_state = snmp_connection_states[conn->state];
+
   if (conn->bgp->p.mrtdump & MD_STATES)
     mrt_dump_bgp_state_change(conn, conn->state, new_state);
 
   conn->state = new_state;
+
+  if (old_snmp_state > new_snmp_state)
+    bgp_send_notification(conn, new_snmp_state);
+  else if (old_snmp_state != BGP_SNMP_STATE_ESTABLISHED && new_snmp_state == BGP_SNMP_STATE_ESTABLISHED)
+    bgp_send_notification(conn, new_snmp_state);
 }
 
 void
