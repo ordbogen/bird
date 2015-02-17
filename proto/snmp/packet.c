@@ -237,7 +237,7 @@ static u8 *snmp_encode_object_identifier(u8 *ptr, u8 *end, const snmp_object_ide
 
   /* Update length */
 
-  length = ptr - length_ptr - 2;
+  length = ptr - length_ptr - 1;
 
   if (length < 128) {
     /* We can store the length into a single octet */
