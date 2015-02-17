@@ -32,14 +32,12 @@ static u8 *snmp_encode_int(u8 *ptr, u8 *end, int value)
 
   *ptr++ = SNMP_INTEGER;
 
-  if (value >= -128 && value <= 127)
-  {
+  if (value >= -128 && value <= 127) {
     *ptr++ = 1;
     *ptr++ = value;
     return ptr;
   }
-  else if (value >= -32768 && value <= 32767)
-  {
+  else if (value >= -32768 && value <= 32767) {
     if (ptr + 3 >= end)
       return NULL;
 
@@ -47,8 +45,7 @@ static u8 *snmp_encode_int(u8 *ptr, u8 *end, int value)
     *ptr++ = value >> 8;
     *ptr++ = value;
   }
-  else if (value >= -8388608 && value <= 8388607)
-  {
+  else if (value >= -8388608 && value <= 8388607) {
     if (ptr + 4 >= end)
       return NULL;
 
@@ -57,8 +54,7 @@ static u8 *snmp_encode_int(u8 *ptr, u8 *end, int value)
     *ptr++ = value >> 8;
     *ptr++ = value;
   }
-  else
-  {
+  else {
     if (ptr + 5 >= end)
       return NULL;
 
@@ -87,21 +83,18 @@ static u8 *snmp_encode_uint(u8 *ptr, u8 *end, snmp_value_type type, unsigned int
     return NULL;
 
   *ptr++ = type;
-  if (value < 128U)
-  {
+  if (value < 128U) {
     *ptr++ = 1;
     *ptr++ = value;
   }
-  else if (value < 32768U)
-  {
+  else if (value < 32768U) {
     if (ptr + 3 >= end)
       return NULL;
 
     *ptr++ = 2;
     *(u16 *)ptr = htons(value);
   }
-  else if (value < 8388607U)
-  {
+  else if (value < 8388607U) {
     if (ptr + 4 >= end)
       return NULL;
 
@@ -110,18 +103,16 @@ static u8 *snmp_encode_uint(u8 *ptr, u8 *end, snmp_value_type type, unsigned int
     *ptr++ = value >> 8;
     *ptr++ = value;
   }
-  else if (value < 2147483648U)
-  {
-    if (ptr + 4 >= end)
+  else if (value < 2147483648U) {
+    if (ptr + 5 >= end)
       return NULL;
 
     *ptr++ = 4;
     *(u32 *)ptr = htonl(value);
     ptr += 4;
   }
-  else
-  {
-    if (ptr + 5 >= end)
+  else {
+    if (ptr + 6 >= end)
       return NULL;
 
     *ptr++ = 5;
