@@ -78,7 +78,7 @@ snmp_proto: snmp_proto_start proto_name '{' snmp_proto_opts '}'
     cf_error("Missing destinations");
 
   if (SNMP_CFG->community == NULL) {
-    struct snmp_destination dest;
+    struct snmp_destination *dest;
     WALK_LIST(dest, SNMP_CFG->destinations) {
       if (dest->community == NULL)
         cf_error("Missing community");
