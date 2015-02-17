@@ -16,12 +16,19 @@ static void snmp_tx_hook(sock *socket)
   struct snmp_proto *snmp = (struct snmp_proto *)socket->data;
   struct snmp_payload *payload = HEAD(snmp->payload_list);
 
-  snmp->socket->tx_hook = NULL;
+  socket->tx_hook = NULL;
+  sk_set_tbuf(socket, NULL);
 
   rem_node(&payload->n);
   sl_free(snmp->payload_slab, payload);
 
   snmp_flush_queue(snmp);
+}
+
+static void snmp_err_hook(sock *socket, int err)
+{
+  struct snmp_proto *snmp = (struct snmp_proto *)socket->data;
+  log(L_ERR "%s: Socket error: %s (%i)", snmp->p.name, strerror(err), err);
 }
 
 static sock *snmp_get_socket(struct snmp_proto *snmp)
@@ -30,6 +37,7 @@ static sock *snmp_get_socket(struct snmp_proto *snmp)
     sock *sock = sock_new(snmp->p.pool);
 
     sock->type = SK_UDP;
+    sock->err_hook = snmp_err_hook;
     sock->data = snmp;
 
     if (sk_open(sock) == -1)
@@ -51,14 +59,16 @@ static void snmp_flush_queue(struct snmp_proto *snmp)
 
     sock *socket = snmp_get_socket(snmp);
 
-    if (socket == NULL) {
+    if (socket != NULL) {
       int err;
+      sk_set_tbuf(socket, payload->data);
       err = sk_send_to(socket, payload->size, payload->addr, 162);
       if (err == 0) {
         /* Wait for transmission to complete */
         socket->tx_hook = snmp_tx_hook;
         return;
       }
+      sk_set_tbuf(socket, NULL);
       if (err < 0) {
         log(L_ERR "%s: Error transmitting notification to %I: %s", snmp->p.name, payload->addr, socket->err);
       }
