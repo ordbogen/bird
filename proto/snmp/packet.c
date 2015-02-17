@@ -207,14 +207,14 @@ static u8 *snmp_encode_object_identifier(u8 *ptr, u8 *end, const snmp_object_ide
       if (ptr + 2 >= end)
         return NULL;
       *ptr++ = (subid >> 7) | 0x80;
-      *ptr++ = subid;
+      *ptr++ = (subid & 0x7F);
     }
     else if (subid < (1 << 21)) {
       if (ptr + 3 >= end)
         return NULL;
       *ptr++ = (subid >> 14) | 0x80;
       *ptr++ = (subid >> 7) | 0x80;
-      *ptr++ = subid;
+      *ptr++ = (subid & 0x7F);
     }
     else if (subid < (1 << 28)) {
       if (ptr + 4 >= end)
@@ -222,7 +222,7 @@ static u8 *snmp_encode_object_identifier(u8 *ptr, u8 *end, const snmp_object_ide
       *ptr++ = (subid >> 21) | 0x80;
       *ptr++ = (subid >> 14) | 0x80;
       *ptr++ = (subid >> 7) | 0x80;
-      *ptr++ = subid;
+      *ptr++ = (subid & 0x7F);
     }
     else {
       if (ptr + 5 >= end)
@@ -231,7 +231,7 @@ static u8 *snmp_encode_object_identifier(u8 *ptr, u8 *end, const snmp_object_ide
       *ptr++ = (subid >> 21) | 0x80;
       *ptr++ = (subid >> 14) | 0x80;
       *ptr++ = (subid >> 7) | 0x80;
-      *ptr++ = subid;
+      *ptr++ = (subid & 0x7F);
     }
   }
 
