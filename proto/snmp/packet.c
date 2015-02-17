@@ -461,7 +461,7 @@ unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, c
   ptr = snmp_encode_int(ptr, end, 0); /* error-index */
 
   /* Encode variable-bindings sequence */
-  varbinds_begin = ptr = snmp_encode_sequence(buffer, end, SNMP_SEQUENCE, &varbinds_size);
+  varbinds_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &varbinds_size);
 
   /* sysUptime.0 */
   ptr = snmp_encode_varbind(ptr, end, sysUpTime, SNMP_TIME_TICKS, (u32)now);
