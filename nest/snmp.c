@@ -1,4 +1,6 @@
-#include "bird/snmp.h"
+#include "nest/snmp.h"
+
+#include "nest/bird.h"
 
 #ifdef CONFIG_SNMP
 

@@ -7,6 +7,8 @@
 #ifndef _BIRD_NSNMP_H_
 #define _BIRD_NSNMP_H_
 
+#include "nest/bird.h"
+
 typedef enum snmp_value_type
 {
   SNMP_INTEGER = 0x02, /* INTEGER */
