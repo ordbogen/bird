@@ -363,7 +363,8 @@ static unsigned int snmp_connection_states[BS_MAX] = {
   BGP_SNMP_STATE_ACTIVE, /* BS_ACTIVE */
   BGP_SNMP_STATE_OPENSENT, /* BS_OPENSENT */
   BGP_SNMP_STATE_OPENCONFIRM, /* BS_OPENCONFIRM */
-  BGP_SNMP_STATE_ESTABLISHED /* BS_ESTABLISHED */
+  BGP_SNMP_STATE_ESTABLISHED, /* BS_ESTABLISHED */
+  BGP_SNMP_STATE_IDLE /* BS_CLOSE */
 };
 
 #ifdef IPV6
@@ -444,7 +445,7 @@ static inline void
 bgp_conn_set_state(struct bgp_conn *conn, unsigned new_state)
 {
   enum bgp_snmp_state old_snmp_state = snmp_connection_states[conn->state];
-  enum bgp_snmp_state new_snmp_state = snmp_connection_states[conn->state];
+  enum bgp_snmp_state new_snmp_state = snmp_connection_states[new_state];
 
   if (conn->bgp->p.mrtdump & MD_STATES)
     mrt_dump_bgp_state_change(conn, conn->state, new_state);
