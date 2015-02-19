@@ -407,7 +407,7 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
   u32 ip;
   u8 error[2];
 
-  if (!cfg->c.snmp)
+  if (!cfg->snmp)
     return;
 
   ip = ipa_to_u32(cfg->remote_ip);
