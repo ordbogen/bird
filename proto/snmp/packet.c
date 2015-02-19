@@ -405,8 +405,8 @@ unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, c
 
   u8 *ptr;
 
-  static const snmp_object_identifier sysUpTime[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 1, 3, 0);
-  static const snmp_object_identifier snmpTrapOID[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 6, 3, 1, 1, 4, 1, 0);
+  static const snmp_object_identifier sys_up_time[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 1, 3, 0);
+  static const snmp_object_identifier snmp_trap_oid[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 6, 3, 1, 1, 4, 1, 0);
 
   /* Encode message sequence */
   message_begin = ptr = snmp_encode_sequence(begin, end, SNMP_SEQUENCE, &message_size);
@@ -423,10 +423,10 @@ unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, c
   varbinds_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &varbinds_size);
 
   /* sysUptime.0 */
-  ptr = snmp_encode_varbind(ptr, end, sysUpTime, SNMP_TIME_TICKS, (u32)now);
+  ptr = snmp_encode_varbind(ptr, end, sys_up_time, SNMP_TIME_TICKS, (u32)now);
 
   /* snmpTrapOID.0 */
-  ptr = snmp_encode_varbind(ptr, end, snmpTrapOID, SNMP_OBJECT_IDENTIFIER, notification);
+  ptr = snmp_encode_varbind(ptr, end, snmp_trap_oid, SNMP_OBJECT_IDENTIFIER, notification);
 
   for (;;) {
     const snmp_object_identifier *name;
