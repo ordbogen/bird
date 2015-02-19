@@ -506,28 +506,18 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
   struct bgp_proto *bgp = conn->bgp;
   struct bgp_config *cfg = bgp->cf;
 
-  u32 ip;
+  unsigned int i;
+  const u8 *ptr;
   u8 error[2];
 
   if (!cfg->snmp)
     return;
 
-  ip = ipa_to_u32(cfg->remote_ip);
-
-  bgp_peer_remote_addr[11] = (ip >> 24) & 0xFF;
-  bgp_peer_remote_addr[12] = (ip >> 16) & 0xFF;
-  bgp_peer_remote_addr[13] = (ip >> 8) & 0xFF;
-  bgp_peer_remote_addr[14] = ip & 0xFF;
-
-  bgp_peer_last_error[11] = (ip >> 24) & 0xFF;
-  bgp_peer_last_error[12] = (ip >> 16) & 0xFF;
-  bgp_peer_last_error[13] = (ip >> 8) & 0xFF;
-  bgp_peer_last_error[14] = ip & 0xFF;
-
-  bgp_peer_state[11] = (ip >> 24) & 0xFF;
-  bgp_peer_state[12] = (ip >> 16) & 0xFF;
-  bgp_peer_state[13] = (ip >> 8) & 0xFF;
-  bgp_peer_state[14] = ip & 0xFF;
+  for (i = 0, ptr = (const u8 *)&cfg->remote_ip; i != 4; ++i, ++ptr) {
+    bgp_peer_remote_addr[11 + i] = *ptr;
+    bgp_peer_last_error[11 + i] = *ptr;
+    bgp_peer_state[11 + i] = *ptr;
+  }
 
   error[0] = bgp->last_error_class;
   error[1] = bgp->last_error_code;
