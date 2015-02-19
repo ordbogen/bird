@@ -89,6 +89,7 @@ static void bgp_connect(struct bgp_proto *p);
 static void bgp_active(struct bgp_proto *p);
 static sock *bgp_setup_listen_sk(ip_addr addr, unsigned port, u32 flags);
 static void bgp_update_bfd(struct bgp_proto *p, int use_bfd);
+static const char *bgp_last_errmsg(struct bgp_proto *p);
 
 
 /**
@@ -375,7 +376,108 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
   /*
     BGP4-MIB does not support IPv6
     BGP4V2-MIB supports IPv6, but was never finalized
+    BGP4-V2-MIB-JUNIPER is based on the 3rd draft of BGP4V2-MIB
   */
+
+  /*
+     iso(1) org(3) dod(6) internet(1) enterprises(3) juniperMIB(2636) jnxBgpM2Experiment(5) jnxBgpM2(1) jnxBgpM2BaseScalars(1) jnxBgpM2BaseNotifications(0)
+       jnxBgpM2Established(1)
+       jnxBgpM2BackwardTransition(2)
+
+     In BGP4V2-MIB this would have been
+
+     iso(1) org(3) dod() internet(1) mgmt(2) mib-2(1) bgp4V2(xxx) bgp4V2Notifications(0)
+       bgp4V2EstablishedNotification(1)
+       bgp4V2BackwardTransitionNotification(2)
+  */
+  static const snmp_object_identifier jnx_bgp_m2_established[] =          SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 1, 0, 1);
+  static const snmp_object_identifier jnx_bgp_m2_backward_transition[] =  SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 1, 0, 2);
+
+  /*
+     iso(1) org(3) dod(6) internet(1) enterprises(3) juniperMIB(2636) jnxBgpM2Experiment(5) jnxBgpM2(1) jnxBgpM2Peer(2)
+       jnxBgpM2PeerData(1) jnxBgpM2PeerTable(1) jnxBgpM2PeerEntry(1)
+         jnxBgpM2PeerLocalAddrType(6) (InetAddressType)
+         jnxBgpM2PeerLocalAddr(7) (InetAddress)
+         jnxBgpM2PeerRemoteAddrType(10) (InetAddressType)
+         jnxBgpM2PeerRemoteAddr(11) (InetAddress)
+         jnxBgpM2PeerState(2) (INTEGER)
+       jnxBgpM2PeerErrors(2) jnxBgpM2PeerErrorsTable(1) jnxBgpM2PeerErrorsEntry(1)
+         jnxBgpM2PeerLastErrorReceived(1) (OCTET STRING (SIZE(2)))
+         jnxBgpM2PeerLastErrorReceivedText(5) (SnmpAdminString)
+
+       Last 37 subidentifiers are:
+        jnxBgpM2PeerRoutingInstance (1 subidentifier, always 0 in BIRD)
+        jnxBgpM2PeerLocalAddrType (1 subidentifier, always ipv6(2) in BIRD)
+        Length of jnxBgpM2PeerLocalAddr (1 subidentifier, always 16 in BIRD)
+        jnxBgpM2PeerLocalAddr (16 subidentifiers)
+        jnxBgpM2PeerRemoteAddrType (1 subidentifier, always ipv6(2) in BIRD)
+        Length of jnxBgpM2PeerRemoteAddr (1 subidentifier, always 16 in BIRD)
+        jnxBgpM2PeerRemoteAddr (16 subidentifiers)
+   */
+  static snmp_object_identifier jnx_bgp_m2_peer_local_addr_type[] =           SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 2, 1, 1, 1, 6,  0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  static snmp_object_identifier jnx_bgp_m2_peer_local_addr[] =                SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 2, 1, 1, 1, 7,  0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  static snmp_object_identifier jnx_bgp_m2_peer_remote_addr_type[] =          SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 2, 1, 1, 1, 10, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  static snmp_object_identifier jnx_bgp_m2_peer_remote_addr[] =               SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 2, 1, 1, 1, 11, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  static snmp_object_identifier jnx_bgp_m2_peer_state[] =                     SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 2, 1, 1, 1, 2,  0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  static snmp_object_identifier jnx_bgp_m2_peer_last_error_received[] =       SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 2, 2, 1, 1, 1,  0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  static snmp_object_identifier jnx_bgp_m2_peer_last_error_received_text[] =  SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 3, 2636, 5, 1, 2, 2, 1, 1, 5,  0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  struct bgp_proto *bgp = conn->bgp;
+  struct bgp_config *cfg = bgp->cf;
+
+  unsigned int i;
+  const u8 *ptr;
+  u8 error[2];
+
+  if (!cfg->snmp)
+    return;
+
+  for (i = 0, ptr = (const u8 *)&bgp->source_addr; i != 16; ++i, ++ptr) {
+    jnx_bgp_m2_peer_local_addr_type[16 + i] = *ptr;
+    jnx_bgp_m2_peer_local_addr[16 + i] = *ptr;
+    jnx_bgp_m2_peer_remote_addr_type[16 + i] = *ptr;
+    jnx_bgp_m2_peer_remote_addr[16 + i] = *ptr;
+    jnx_bgp_m2_peer_state[16 + i] = *ptr;
+    jnx_bgp_m2_peer_last_error_received[16 + i] = *ptr;
+    jnx_bgp_m2_peer_last_error_received_text[16 + i] = *ptr;
+  }
+
+  for (i = 0, ptr = (const u8 *)&cfg->remote_ip; i != 16; ++i, ++ptr) {
+    jnx_bgp_m2_peer_local_addr_type[34 + i] = *ptr;
+    jnx_bgp_m2_peer_local_addr[34 + i] = *ptr;
+    jnx_bgp_m2_peer_remote_addr_type[34 + i] = *ptr;
+    jnx_bgp_m2_peer_remote_addr[34 + i] = *ptr;
+    jnx_bgp_m2_peer_state[34 + i] = *ptr;
+    jnx_bgp_m2_peer_last_error_received[34 + i] = *ptr;
+    jnx_bgp_m2_peer_last_error_received_text[34 + i] = *ptr;
+  }
+
+  error[0] = bgp->last_error_class;
+  error[1] = bgp->last_error_code;
+
+  if (state == BGP_SNMP_STATE_ESTABLISHED) {
+    snmp_send_notification(
+        jnx_bgp_m2_established,
+        jnx_bgp_m2_peer_local_addr_type, SNMP_INTEGER, 2,
+        jnx_bgp_m2_peer_local_addr, SNMP_OCTET_STRING, &bgp->source_addr, 16,
+        jnx_bgp_m2_peer_remote_addr_type, SNMP_INTEGER, 2,
+        jnx_bgp_m2_peer_remote_addr, SNMP_OCTET_STRING, &cfg->remote_ip, 16,
+        jnx_bgp_m2_peer_last_error_received, SNMP_OCTET_STRING, error, 2,
+        jnx_bgp_m2_peer_state, SNMP_INTEGER, state,
+        NULL);
+  }
+  else {
+    snmp_send_notification(
+        jnx_bgp_m2_backward_transition,
+        jnx_bgp_m2_peer_local_addr_type, SNMP_INTEGER, 2,
+        jnx_bgp_m2_peer_local_addr, SNMP_OCTET_STRING, &bgp->source_addr, 16,
+        jnx_bgp_m2_peer_remote_addr_type, SNMP_INTEGER, 2,
+        jnx_bgp_m2_peer_remote_addr, SNMP_OCTET_STRING, &cfg->remote_ip, 16,
+        jnx_bgp_m2_peer_last_error_received, SNMP_OCTET_STRING, error, 2,
+        jnx_bgp_m2_peer_last_error_received_text, SNMP_OCTET_STRING, bgp_last_errmsg(bgp), -1,
+        jnx_bgp_m2_peer_state, SNMP_INTEGER, state,
+        NULL);
+  }
 }
 
 #else /* IPV6 */
@@ -396,6 +498,10 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
       bgpPeerRemoteAddr(7) (IpAddress)
       bgpPeerLastError(14) (OCTET STRING (2))
       bgpPeerState(2) (INTEGER)
+
+    Last 5 subidentifiers are
+     Length of bgpPeerRemoteAddr (1 subidentifier)
+     bgpRemoteAddr (4 subidentifiers)
   */
   static snmp_object_identifier bgp_peer_remote_addr[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 15, 3, 1, 7,  4, 0, 0, 0, 0);
   static snmp_object_identifier bgp_peer_last_error[] =  SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 15, 3, 1, 14, 4, 0, 0, 0, 0);
