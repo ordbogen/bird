@@ -32,7 +32,11 @@ struct snmp_payload
 {
   node n;
   ip_addr addr;
-  unsigned char data[576];
+#ifdef IPV6
+  unsigned char data[1232]; /* See RFC 2460, p. 25 */
+#else /* IPV6 */
+  unsigned char data[512]; /* See RFC 791, p. 13 */
+#endif /* IPV6 */
   unsigned int size;
 };
 
