@@ -406,7 +406,7 @@ unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, c
   u8 *ptr;
 
   static const snmp_object_identifier sysUpTime[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 1, 3, 0);
-  static const snmp_object_identifier snmpTrapOID[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 6, 3, 1, 1, 4, 0);
+  static const snmp_object_identifier snmpTrapOID[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 6, 3, 1, 1, 4, 1, 0);
 
   /* Encode message sequence */
   message_begin = ptr = snmp_encode_sequence(begin, end, SNMP_SEQUENCE, &message_size);
