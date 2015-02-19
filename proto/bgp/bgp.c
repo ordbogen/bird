@@ -368,11 +368,11 @@ static unsigned int snmp_connection_states[BS_MAX] = {
   BGP_SNMP_STATE_IDLE /* BS_CLOSE */
 };
 
-#ifdef IPV6
-
-static inline void
+static void
 bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
 {
+#ifdef IPV6
+
   /*
     BGP4-MIB does not support IPv6
     BGP4V2-MIB supports IPv6, but was never finalized
@@ -478,13 +478,9 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
         jnx_bgp_m2_peer_state, SNMP_INTEGER, state,
         NULL);
   }
-}
 
 #else /* IPV6 */
 
-static void
-bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
-{
   /*
     iso(1) org(3) dod(6) internet(1) mgmt(2) mib-2(1) bgp(15) bgpNotification(0)
       bgpEstablishedNotification(1)
@@ -543,9 +539,10 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
     bgp_peer_state, SNMP_INTEGER, state,
     NULL
   );
-}
 
 #endif /* IPV6 */
+
+}
 
 static inline void
 bgp_conn_set_state(struct bgp_conn *conn, unsigned new_state)
