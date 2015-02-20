@@ -362,7 +362,7 @@ static u8 *snmp_encode_varbind(u8 *ptr, u8 *end, const snmp_object_identifier *n
 /* Encode a SNMP notification
 
    Returns the size of the notification in octets or 0 if buffer is too small. */
-unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, const char *community, const snmp_object_identifier *notification, va_list args)
+unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, const struct snmp_params *params, const snmp_object_identifier *notification, va_list args)
 {
   /*
     An SNMPv2 Trap is essentially encoded as follows:
@@ -411,7 +411,7 @@ unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, c
   /* Encode message sequence */
   message_begin = ptr = snmp_encode_sequence(begin, end, SNMP_SEQUENCE, &message_size);
   ptr = snmp_encode_int(ptr, end, 1); /* version */
-  ptr = snmp_encode_octet_string(ptr, end, community, -1); /* community */
+  ptr = snmp_encode_octet_string(ptr, end, params->community, -1); /* community */
 
   /* Encode SNMPv2-Trap-PDU sequence */
   pdu_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SNMPV2_TRAP_PDU, &pdu_size);

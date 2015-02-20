@@ -65,7 +65,7 @@ void snmp_enqueue_notificationv(
 unsigned int snmp_encode_notificationv(
     void *buffer,
     unsigned int buffer_size,
-    const char *community,
+    const struct snmp_params *params,
     const snmp_object_identifier *notification,
     va_list args);
 

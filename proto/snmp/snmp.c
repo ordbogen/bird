@@ -149,7 +149,7 @@ void snmp_enqueue_notificationv(struct snmp_proto *snmp, const snmp_object_ident
   WALK_LIST(dest, cfg->destinations) {
     struct snmp_payload *payload = (struct snmp_payload *)sl_alloc(snmp->payload_slab);
 
-    payload->size = snmp_encode_notificationv(payload->data, sizeof(payload->data), dest->params.community, notification, args);
+    payload->size = snmp_encode_notificationv(payload->data, sizeof(payload->data), &dest->params, notification, args);
     if (payload->size == 0) {
       log(L_WARN "%s: Notification exceeded buffer limits", snmp->p.name);
       sl_free(snmp->payload_slab, payload);
