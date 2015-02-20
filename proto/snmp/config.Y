@@ -75,12 +75,15 @@ snmp_proto: snmp_proto_start proto_name '{' snmp_proto_opts '}'
   if (EMPTY_LIST(SNMP_CFG->destinations))
     cf_error("Missing destinations");
 
-  if (SNMP_CFG->def_params.community == NULL) {
-    struct snmp_destination *dest;
-    WALK_LIST(dest, SNMP_CFG->destinations) {
-      if (dest->params.community == NULL)
-        cf_error("Missing community");
-    }
+  struct snmp_destination *dest;
+  WALK_LIST(dest, SNMP_CFG->destinations) {
+    /* Copy from defaults */
+    if (dest->params.community == NULL)
+      dest->params.community = SNMP_CFG->def_params.community;
+
+    /* Validate */
+    if (dest->params.community == NULL)
+      cf_error("Missing community");
   }
 };
 
