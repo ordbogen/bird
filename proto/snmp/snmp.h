@@ -14,18 +14,23 @@
 #include "lib/event.h"
 #include "lib/socket.h"
 
+struct snmp_params
+{
+  char *community;
+};
+
 struct snmp_destination
 {
   node n;
   ip_addr addr;
-  char *community;
+  struct snmp_params params;
 };
 
 struct snmp_config
 {
   struct proto_config c;
   list destinations;
-  char *community;
+  struct snmp_params def_params;
 };
 
 struct snmp_payload

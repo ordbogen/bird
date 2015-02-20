@@ -150,14 +150,14 @@ void snmp_enqueue_notificationv(struct snmp_proto *snmp, const snmp_object_ident
   WALK_LIST(dest, cfg->destinations) {
     struct snmp_payload *payload = (struct snmp_payload *)sl_alloc(snmp->payload_slab);
 
-    if (dest->community == NULL && default_payload != NULL) {
+    if (dest->params.community == NULL && default_payload != NULL) {
       /* We are using default community, so the packets are identical */
       payload->size = default_payload->size;
       memcpy(payload->data, default_payload->data, default_payload->size);
     }
     else {
       /* We are using non-default community or this is the first destination */
-      const char *community = (dest->community == NULL ? cfg->community : dest->community);
+      const char *community = (dest->params.community == NULL ? cfg->def_params.community : dest->params.community);
 
       payload->size = snmp_encode_notificationv(payload->data, sizeof(payload->data), community, notification, args);
       if (payload->size == 0) {
@@ -167,7 +167,7 @@ void snmp_enqueue_notificationv(struct snmp_proto *snmp, const snmp_object_ident
       }
 
       /* Set us as default packet if default community */
-      if (dest->community == NULL)
+      if (dest->params.community == NULL)
         default_payload = payload;
     }
 

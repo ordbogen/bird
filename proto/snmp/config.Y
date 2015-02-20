@@ -15,7 +15,7 @@ CF_DEFINES
 
 extern struct snmp_config *snmp_cf;
 
-static struct snmp_destination *this_destination = NULL;
+static struct snmp_params *this_params;
 
 CF_DECLS
 
@@ -33,32 +33,35 @@ snmp_proto_start: proto_start SNMP
   if (snmp_cf)
     cf_error("Only one SNMP instance allowed");
   snmp_cf = SNMP_CFG;
+  this_params = &snmp_cf->def_params;
 };
 
 snmp_destination_start: DESTINATION ipa
 {
-  this_destination = cfg_allocz(sizeof(struct snmp_destination));
-  this_destination->addr = $2;
-  add_tail(&SNMP_CFG->destinations, &this_destination->n);
+  struct snmp_destination *destination = cfg_allocz(sizeof(struct snmp_destination));
+  destination->addr = $2;
+  add_tail(&SNMP_CFG->destinations, &destination->n);
+
+  this_params = &destination->params;
 };
 
-snmp_destination_item:
-   COMMUNITY text { this_destination->community = $2; }
+snmp_config_item:
+   COMMUNITY text { this_params->community = $2; }
  ;
 
 snmp_destination_opts:
    /* empty */
- | snmp_destination_opts snmp_destination_item ';'
+ | snmp_destination_opts snmp_config_item ';'
  ;
 
 snmp_destination:
-   snmp_destination_start '{' snmp_destination_opts '}'
- | snmp_destination_start
+   snmp_destination_start '{' snmp_destination_opts '}' { this_params = &SNMP_CFG->def_params; }
+ | snmp_destination_start { this_params = &SNMP_CFG->def_params; }
  ;
 
 snmp_proto_item:
    proto_item
- | COMMUNITY text { SNMP_CFG->community = $2; }
+ | snmp_config_item
  | snmp_destination
  ;
 
@@ -72,10 +75,10 @@ snmp_proto: snmp_proto_start proto_name '{' snmp_proto_opts '}'
   if (EMPTY_LIST(SNMP_CFG->destinations))
     cf_error("Missing destinations");
 
-  if (SNMP_CFG->community == NULL) {
+  if (SNMP_CFG->def_params.community == NULL) {
     struct snmp_destination *dest;
     WALK_LIST(dest, SNMP_CFG->destinations) {
-      if (dest->community == NULL)
+      if (dest->params.community == NULL)
         cf_error("Missing community");
     }
   }
