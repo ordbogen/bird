@@ -15,17 +15,11 @@ CF_DEFINES
 
 extern struct snmp_config *snmp_cf;
 
-static void snmp_add_destination(list *destinations, ip_addr addr, char *community)
-{
-  struct snmp_destination *destination = (struct snmp_destination *)cfg_allocz(sizeof(struct snmp_destination));
-  destination->addr = addr;
-  destination->community = (community == NULL ? NULL : cfg_strdup(community));
-  add_tail(destinations, &destination->n);
-}
+static struct snmp_destination *this_destination = NULL;
 
 CF_DECLS
 
-CF_KEYWORDS(SNMP, DESTINATION, COMMUNITY)
+CF_KEYWORDS(SNMP, ADDRESS, DESTINATION, COMMUNITY)
 
 CF_GRAMMAR
 
@@ -41,30 +35,31 @@ snmp_proto_start: proto_start SNMP
   snmp_cf = SNMP_CFG;
 };
 
-snmp_community: text
+snmp_destination_start: DESTINATION ipa
 {
-  SNMP_CFG->community = $1;
+  this_destination = cfg_allocz(sizeof(struct snmp_destination));
+  this_destination->addr = $2;
+  add_tail(&SNMP_CFG->destinations, &this_destination->n);
 };
 
-snmp_destination_simple: ipa
-{
-  snmp_add_destination(&SNMP_CFG->destinations, $1, NULL);
-};
+snmp_destination_item:
+   COMMUNITY text { this_destination->community = $2; }
+ ;
 
-snmp_destination_advanced: ipa COMMUNITY text
-{
-  snmp_add_destination(&SNMP_CFG->destinations, $1, $3);
-};
+snmp_destination_opts:
+   /* empty */
+ | snmp_destination_opts snmp_destination_item ';'
+ ;
 
 snmp_destination:
-   snmp_destination_simple
- | snmp_destination_advanced
+   snmp_destination_start '{' snmp_destination_opts '}'
+ | snmp_destination_start
  ;
 
 snmp_proto_item:
    proto_item
- | DESTINATION snmp_destination
- | COMMUNITY snmp_community
+ | COMMUNITY text { SNMP_CFG->community = $2; }
+ | snmp_destination
  ;
 
 snmp_proto_opts:
