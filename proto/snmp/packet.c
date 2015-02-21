@@ -478,6 +478,8 @@ static u8 *snmp_encode_snmpv2c_trap(u8 *ptr, u8 *end, const struct snmp_params *
        community OCTET STRING,
        data ANY
      }
+
+     See RFC 1901 for more details
   */
   u8 *message_begin;
   u16 *message_size;
@@ -498,7 +500,37 @@ static u8 *snmp_encode_snmpv2c_trap(u8 *ptr, u8 *end, const struct snmp_params *
 /* Encode SNMPv3 notification */
 static inline u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *params, const snmp_object_identifier *notification, va_list args)
 {
-  /* TODO */
+  /*
+     The SNMPv3 message follows the following syntax:
+
+     SNMPv3Message ::= SEQUENCE {
+       msgVersion INTEGER (0..2147483647),
+       msgGlobalData HeaderData,
+       msgSecurityParameters OCTET STRING,
+       msgData ScopedPduData
+     }
+
+     HeaderData ::= SEQUENCE {
+       msgID INTEGER (0..2147483647),
+       msgMagSize INTEGER (484..2147483647),
+       msgFlags OCTET STRING (SIZE(1)),
+       msgSecurityModel INTEGER(1..2147483647)
+     }
+
+     ScopedPduData ::= CHOICE {
+       plaintext ScopedPDU,
+       encryptedPDU OCTET STRING
+     }
+
+     ScopedPdu ::= SEQUENCE {
+       contextEngineID OCTET STRING,
+       contextName OCTET STRING,
+       data ANY
+     }
+
+     See RFC 3412 for more details
+  */
+
   return NULL;
 }
 
