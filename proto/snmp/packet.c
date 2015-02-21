@@ -359,59 +359,46 @@ static u8 *snmp_encode_varbind(u8 *ptr, u8 *end, const snmp_object_identifier *n
   return ptr;
 }
 
-/* Encode a SNMP notification
-
-   Returns the size of the notification in octets or 0 if buffer is too small. */
-unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, const struct snmp_params *params, const snmp_object_identifier *notification, va_list args)
+/* Encode a SNMPv2-Trap PDU */
+static u8 *snmp_encode_trap(u8 *ptr, u8 *end, const snmp_object_identifier *notification, va_list args)
 {
   /*
-    An SNMPv2 Trap is essentially encoded as follows:
+     An SNMPv2-Trap PDU is encoded as follows
 
-    Message SEQUENCE {
-      version INTEGER,
-      community OCTET STRING,
-      snmpV2-trap [7] IMPLICIT SEQUENCE {
-        request-id INTEGER,
-        error-status INTEGER,
-        error-index INTEGER,
-        variable-bindings SEQUENCE OF VarBind
-      }
-    }
+     snmpV2-trap ::= [7] IMPLICIT SEQUENCE {
+       request-id INTEGER,
+       error-status INTEGER,
+       error-index INTEGER,
+       variable-bindings SEQUENCE OF VarBind
+     }
 
-    Each VarBind is encoded as follows:
+     VarBind ::= SEQUENCE {
+       name OBJECT IDENTIFIER,
+       value ObjectSyntax
+     }
 
-    VarBind SEQUENCE {
-      name OBJECT IDENTIFIER,
-      value ANY
-    }
+     ObjectSyntax ::= CHOICE {
+       integer-value          INTEGER (-2147483648..2147483647),
+       string-value           OCTET STRING (SIZE (0..65535)),
+       objectID-value         OBJECT IDENTIFIER,
+       ipAddress-value        [APPLICATION 0] IMPLICIT OCTET STRING (SIZE(4)),
+       counter-value          [APPLICATION 1] IMPLICIT INTEGER (0..4294967295),
+       unsigned-integer-value [APPLICATION 2] IMPLICIT INTEGER (0..4294967295),
+       timeticks-value        [APPLICATION 3] IMPLICIT INTEGER (0..4294967295),
+       arbitrary-value        [APPLICATION 4] IMPLICIT OCTET STRING,
+       big-counter-value      [APPLICATION 6] IMPLICIT INTEGER (0..18446744073709551615)
+     }
 
-    Data is encoded in ASN.1 BER
-
-    The first two VarBinds MUST be sysUpTime.0 and snmpTrapOID.0
+     The first two VarBinds MUST be SNMPv2-MIB::sysUpTime.0 and SNMPv2-MIB::snmpTrapOID.0
   */
-
   static int sequence_id = 0;
-  u8 *begin = (u8 *)buffer;
-  u8 *end = begin + buffer_size;
-
-  u8 *message_begin;
-  u16 *message_size;
-
-  u8 *pdu_begin;
-  u16 *pdu_size;
-
-  u8 *varbinds_begin;
-  u16 *varbinds_size;
-
-  u8 *ptr;
-
   static const snmp_object_identifier sys_up_time[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 2, 1, 1, 3, 0);
   static const snmp_object_identifier snmp_trap_oid[] = SNMP_OBJECT_IDENTIFIER(1, 3, 6, 1, 6, 3, 1, 1, 4, 1, 0);
 
-  /* Encode message sequence */
-  message_begin = ptr = snmp_encode_sequence(begin, end, SNMP_SEQUENCE, &message_size);
-  ptr = snmp_encode_int(ptr, end, 1); /* version */
-  ptr = snmp_encode_octet_string(ptr, end, params->community, -1); /* community */
+  u8 *pdu_begin;
+  u16 *pdu_size;
+  u8 *varbinds_begin;
+  u16 *varbinds_size;
 
   /* Encode SNMPv2-Trap-PDU sequence */
   pdu_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SNMPV2_TRAP_PDU, &pdu_size);
@@ -474,9 +461,60 @@ unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, c
   }
 
   /* Update sizes */
-  *message_size = htons(ptr - message_begin);
   *pdu_size = htons(ptr - pdu_begin);
   *varbinds_size = htons(ptr - varbinds_begin);
+
+  return ptr;
+}
+
+/* Encode SNMPv2c notification */
+static u8 *snmp_encode_snmpv2c_trap(u8 *ptr, u8 *end, const struct snmp_params *params, const snmp_object_identifier *notification, va_list args)
+{
+  /*
+     The SNMPv2c message follows the following syntax:
+
+     Message ::= SEQUENCE {
+       version INTEGER { version(1) },
+       community OCTET STRING,
+       data ANY
+     }
+  */
+  u8 *message_begin;
+  u16 *message_size;
+
+  /* Encode message sequence */
+  message_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &message_size);
+  ptr = snmp_encode_int(ptr, end, 1); /* version */
+  ptr = snmp_encode_octet_string(ptr, end, params->community, -1); /* community */
+
+  ptr = snmp_encode_trap(ptr, end, notification, args);
+
+  /* Update sizes */
+  *message_size = htons(ptr - message_begin);
+
+  return ptr;
+}
+
+/* Encode SNMPv3 notification */
+static inline u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *params, const snmp_object_identifier *notification, va_list args)
+{
+  /* TODO */
+  return NULL;
+}
+
+/* Encode a SNMP notification
+
+   Returns the size of the notification in octets or 0 if buffer is too small. */
+unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, const struct snmp_params *params, const snmp_object_identifier *notification, va_list args)
+{
+  u8 *begin = (u8 *)buffer;
+  u8 *end = begin + buffer_size;
+  u8 *ptr;
+
+  if (params->version == SNMP_VERSION_2C)
+    ptr = snmp_encode_snmpv2c_trap(ptr, end, params, notification, args);
+  else /* if (params->version == SNMP_VERSION_3) */
+    ptr = snmp_encode_snmpv3_trap(ptr, end, params, notification, args);
 
   return ptr - begin;
 }
