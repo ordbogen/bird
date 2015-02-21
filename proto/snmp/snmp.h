@@ -24,7 +24,16 @@ enum snmp_version
 struct snmp_params
 {
   enum snmp_version version;
+  /* SNMPv2c parameters */
   char *community;
+  /* SNMPv3 USM parameters */
+  u8 engine_id[12];
+  int has_engine_id;
+  int engine_id_length;
+  char *username;
+  char *password;
+  u8 key[12];
+  int has_key;
 };
 
 struct snmp_destination
