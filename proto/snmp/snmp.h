@@ -29,7 +29,6 @@ struct snmp_params
   /* SNMPv3 USM parameters */
   u8 engine_id[12];
   int has_engine_id;
-  int engine_id_length;
   char *username;
   char *password;
   u8 key[12];
