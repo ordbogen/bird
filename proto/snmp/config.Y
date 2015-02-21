@@ -21,7 +21,7 @@ static struct snmp_params *this_params;
 
 CF_DECLS
 
-CF_KEYWORDS(SNMP, ADDRESS, DESTINATION, VERSION)
+CF_KEYWORDS(SNMP, ADDRESS, DESTINATION, VERSION, V2C, V3)
 CF_KEYWORDS(COMMUNITY)
 CF_KEYWORDS(ENGINE, ID, USERNAME, PASSWORD, KEY)
 
@@ -50,18 +50,9 @@ snmp_destination_start: DESTINATION ipa
   this_params = &destination->params;
 };
 
-snmp_version: text
-{
-  if (strcmp($1, "2c") == 0)
-    this_params->version = SNMP_VERSION_2C;
-  else if (strcmp($1, "3") == 0)
-    this_params->version = SNMP_VERSION_3;
-  else
-    cf_error("Invalid SNMP version");
-}
-
 snmp_config_item:
-   VERSION snmp_version
+   VERSION V2C { this_params->community = SNMP_VERSION_2C; }
+ | VERSION V3 { this_params->community = SNMP_VERSION_3; }
  | COMMUNITY text { this_params->community = $2; }
  | ENGINE ID text { if (snmp_parse_key_or_engine_id($3, this_params->engine_id)) this_params->has_engine_id = 1; else cf_error("Invalid engine id"); }
  | USERNAME text { this_params->username = $2; }
