@@ -19,7 +19,7 @@ static struct snmp_params *this_params;
 
 CF_DECLS
 
-CF_KEYWORDS(SNMP, ADDRESS, DESTINATION, COMMUNITY)
+CF_KEYWORDS(SNMP, ADDRESS, DESTINATION, COMMUNITY, VERSION)
 
 CF_GRAMMAR
 
@@ -33,6 +33,7 @@ snmp_proto_start: proto_start SNMP
   if (snmp_cf)
     cf_error("Only one SNMP instance allowed");
   snmp_cf = SNMP_CFG;
+  snmp_cf->def_params.version = SNMP_VERSION_2C;
   this_params = &snmp_cf->def_params;
 };
 
@@ -45,8 +46,19 @@ snmp_destination_start: DESTINATION ipa
   this_params = &destination->params;
 };
 
+snmp_version: text
+{
+  if (strcmp($1, "2c") == 0)
+    this_params->version = SNMP_VERSION_2C;
+  else if (strcmp($1, "3") == 0)
+    this_params->version = SNMP_VERSION_3;
+  else
+    cf_error("Invalid SNMP version");
+}
+
 snmp_config_item:
-   COMMUNITY text { this_params->community = $2; }
+   VERSION snmp_version
+ | COMMUNITY text { this_params->community = $2; }
  ;
 
 snmp_destination_opts:
@@ -78,6 +90,8 @@ snmp_proto: snmp_proto_start proto_name '{' snmp_proto_opts '}'
   struct snmp_destination *dest;
   WALK_LIST(dest, SNMP_CFG->destinations) {
     /* Copy from defaults */
+    if (dest->params.version == SNMP_VERSION_DEFAULT)
+      dest->params.version = SNMP_CFG->def_params.version;
     if (dest->params.community == NULL)
       dest->params.community = SNMP_CFG->def_params.community;
 

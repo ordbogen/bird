@@ -14,8 +14,16 @@
 #include "lib/event.h"
 #include "lib/socket.h"
 
+enum snmp_version
+{
+  SNMP_VERSION_DEFAULT,
+  SNMP_VERSION_2C,
+  SNMP_VERSION_3
+};
+
 struct snmp_params
 {
+  enum snmp_version version;
   char *community;
 };
 
