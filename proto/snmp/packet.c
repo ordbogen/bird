@@ -648,6 +648,8 @@ static u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *p
 
      See RFC 3412 for more details
   */
+  u8 *trap_start = ptr;
+
   u8 *message_begin;
   u16 *message_size;
 
@@ -699,7 +701,7 @@ static u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *p
   if (ptr == NULL)
     return NULL;
 
-  ptr = snmp_encode_octet_string(ptr, end, params->context_engine_id, 12); /* contextEngineID */
+  ptr = snmp_encode_octet_string(ptr, end, params->context_engine_id, params->context_engine_id_length); /* contextEngineID */
   ptr = snmp_encode_octet_string(ptr, end, params->context_name, -1); /* contextName */
   ptr = snmp_encode_trap_pdu(ptr, end, notification, args); /* data */
   *scoped_pdu_size = htons(ptr - scoped_pdu_begin);
@@ -711,7 +713,7 @@ static u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *p
   /* End of SNMPv3Message sequence */
 
   if (ptr != NULL && msg_auth_params != NULL)
-    snmp_encode_security_params_final(message_begin, ptr, params, msg_auth_params); /* Update password if any */
+    snmp_encode_security_params_final(trap_start, ptr, params, msg_auth_params); /* Update password if any */
 
   return ptr;
 }
