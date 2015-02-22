@@ -5,9 +5,9 @@
 
 void hmac_md5(const unsigned char *text, int text_len, const unsigned char *key, int key_len, unsigned char digest[16])
 {
-struct MD5Context ctx;
-  unsigned char k_ipad[65];
-  unsigned char k_opad[65];
+  struct MD5Context ctx;
+  unsigned char k_ipad[64];
+  unsigned char k_opad[64];
   unsigned char tk[16];
   int i;
 
@@ -20,8 +20,13 @@ struct MD5Context ctx;
     key_len = 16;
   }
 
-  memset(k_ipad, 0, sizeof(k_ipad));
-  memset(k_opad, 0, sizeof(k_opad));
+  memset(k_ipad, 0x36, sizeof(k_ipad));
+  memset(k_opad, 0x5c, sizeof(k_opad));
+
+  for (i = 0; i != key_len; ++i) {
+    k_ipad[i] = key[i] ^ 0x36;
+    k_opad[i] = key[i] ^ 0x5c;
+  }
 
   MD5Init(&ctx);
   MD5Update(&ctx, k_ipad, 64);
