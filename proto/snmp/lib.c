@@ -25,7 +25,7 @@ void snmp_encode_password(struct snmp_params *params)
 
   MD5Init(&ctx);
   MD5Update(&ctx, digest, 16);
-  MD5Update(&ctx, params->auth_engine_id, 12);
+  MD5Update(&ctx, params->auth_engine_id, params->auth_engine_id_length);
   MD5Update(&ctx, digest, 16);
   MD5Final(params->key, &ctx);
 
