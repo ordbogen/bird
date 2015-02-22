@@ -374,7 +374,7 @@ static u8 *snmp_encode_varbind(u8 *ptr, u8 *end, const snmp_object_identifier *n
 }
 
 /* Encode a SNMPv2-Trap PDU */
-static u8 *snmp_encode_trap(u8 *ptr, u8 *end, const snmp_object_identifier *notification, va_list args)
+static u8 *snmp_encode_trap_pdu(u8 *ptr, u8 *end, const snmp_object_identifier *notification, va_list args)
 {
   /*
      An SNMPv2-Trap PDU is encoded as follows
@@ -512,7 +512,7 @@ static u8 *snmp_encode_snmpv2c_trap(u8 *ptr, u8 *end, const struct snmp_params *
   ptr = snmp_encode_int(ptr, end, 1); /* version */
   ptr = snmp_encode_octet_string(ptr, end, params->community, -1); /* community */
 
-  ptr = snmp_encode_trap(ptr, end, notification, args);
+  ptr = snmp_encode_trap_pdu(ptr, end, notification, args);
 
   /* Update sizes */
   *message_size = htons(ptr - message_begin);
@@ -701,7 +701,7 @@ static u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *p
 
   ptr = snmp_encode_octet_string(ptr, end, params->context_engine_id, 12); /* contextEngineID */
   ptr = snmp_encode_octet_string(ptr, end, params->context_name, -1); /* contextName */
-  ptr = snmp_encode_trap(ptr, end, notification, args); /* data */
+  ptr = snmp_encode_trap_pdu(ptr, end, notification, args); /* data */
   *scoped_pdu_size = htons(ptr - scoped_pdu_begin);
 
   /* End of msgData sequence */
@@ -710,7 +710,8 @@ static u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *p
 
   /* End of SNMPv3Message sequence */
 
-  snmp_encode_security_params_final(message_begin, ptr, params, msg_auth_params); /* Update password if any */
+  if (ptr != NULL && msg_auth_params != NULL)
+    snmp_encode_security_params_final(message_begin, ptr, params, msg_auth_params); /* Update password if any */
 
   return ptr;
 }
