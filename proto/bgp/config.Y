@@ -27,7 +27,7 @@ CF_KEYWORDS(BGP, LOCAL, NEIGHBOR, AS, HOLD, TIME, CONNECT, RETRY,
 	INTERPRET, COMMUNITIES, BGP_ORIGINATOR_ID, BGP_CLUSTER_LIST, IGP,
 	TABLE, GATEWAY, DIRECT, RECURSIVE, MED, TTL, SECURITY, DETERMINISTIC,
 	SECONDARY, ALLOW, BFD, ADD, PATHS, RX, TX, GRACEFUL, RESTART, AWARE,
-	SNMP)
+	SNMP, NOTIFICATIONS)
 
 CF_GRAMMAR
 
@@ -125,7 +125,7 @@ bgp_proto:
  | bgp_proto IGP TABLE rtable ';' { BGP_CFG->igp_table = $4; }
  | bgp_proto TTL SECURITY bool ';' { BGP_CFG->ttl_security = $4; }
  | bgp_proto BFD bool ';' { BGP_CFG->bfd = $3; cf_check_bfd($3); }
- | bgp_proto SNMP bool ';' { BGP_CFG->snmp = $3; }
+ | bgp_proto SNMP NOTIFICATIONS bool ';' { BGP_CFG->snmp = $4; }
  ;
 
 CF_ADDTO(dynamic_attr, BGP_ORIGIN
