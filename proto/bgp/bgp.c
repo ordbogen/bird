@@ -510,10 +510,12 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
   const u8 *ptr;
   u8 error[2];
 
+  u32 remote_ip = htonl(ipa_to_u32(cfg->remote_ip));
+
   if (!cfg->snmp)
     return;
 
-  for (i = 0, ptr = (const u8 *)&cfg->remote_ip; i != 4; ++i, ++ptr) {
+  for (i = 0, ptr = (const u8 *)&remote_ip; i != 4; ++i, ++ptr) {
     bgp_peer_remote_addr[11 + i] = *ptr;
     bgp_peer_last_error[11 + i] = *ptr;
     bgp_peer_state[11 + i] = *ptr;
