@@ -577,8 +577,8 @@ static u8 *snmp_encode_security_params_init(u8 *ptr, u8 *end, const struct snmp_
       return NULL;
 
     ptr = snmp_encode_octet_string(ptr, end, params->auth_engine_id, params->auth_engine_id_length); /* msgAuthoritativeEngineID */
-    ptr = snmp_encode_int(ptr, end, 0); /* msgAuthoritativeEngineBoots */
-    ptr = snmp_encode_int(ptr, end, 0); /* msgAuthoritativeEngineTime */
+    ptr = snmp_encode_int(ptr, end, 2147483647); /* msgAuthoritativeEngineBoots */
+    ptr = snmp_encode_int(ptr, end, now & 0x7FFFFFFF); /* msgAuthoritativeEngineTime */
     ptr = snmp_encode_octet_string(ptr, end, params->username, -1); /* msgUserName */
 
     if (params->key_length != 0) {
