@@ -303,10 +303,8 @@ static u8 *snmp_encode_sequence(u8 *ptr, u8 *end, snmp_sequence_type type, u16 *
      so we make room for a 16-bit size, so that we can easily update the size later
      regardless of the final size of the message */
 
-  if (ptr == NULL || ptr + 4 >= end) {
-    *ppsize = 0; /* Stupid hack to void gcc warning */
+  if (ptr == NULL || ptr + 4 >= end)
     return NULL;
-  }
 
   *ptr++ = type;
   *ptr++ = 0x82; /* 2-octet length */
