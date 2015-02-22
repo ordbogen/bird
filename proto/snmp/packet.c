@@ -6,6 +6,7 @@
 
 #include "nest/bird.h"
 #include "snmp.h"
+#include "lib/hmac.h"
 
 #include <assert.h>
 #include <string.h>
@@ -17,6 +18,16 @@ typedef enum snmp_sequence_type
   SNMP_SEQUENCE = 0x30, /* SEQUENCE */
   SNMP_SNMPV2_TRAP_PDU = 0xA7 /* SNMPv2-Trap-PDU ::= [7] IMPLICIT PDU */
 } snmp_sequence_type;
+
+enum snmp_security_model
+{
+  SNMP_USM_SECURITY_MODEL = 0x03,
+  SNMP_TSM_SECURITY_MODEL = 0x04
+};
+
+#define SNMP_AUTH_FLAG  0x01
+#define SNMP_PRIV_FLAG  0x02
+#define SNMP_REPORTABLE_FLAG 0x04
 
 /* Encode a signed integer as per ASN.1 BER */
 static u8 *snmp_encode_int(u8 *ptr, u8 *end, int value)
@@ -131,7 +142,7 @@ static u8 *snmp_encode_octet_string(u8 *ptr, u8 *end, const void *value, int len
     return NULL;
 
   if (length == -1)
-    length = strlen((const char *)value);
+    length = (value == NULL ? 0 : strlen((const char *)value));
 
   *ptr++ = SNMP_OCTET_STRING;
   if (length < 128)
@@ -314,6 +325,9 @@ static u8 *snmp_encode_varbind(u8 *ptr, u8 *end, const snmp_object_identifier *n
   va_list args;
 
   varbind_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &varbind_size);
+  if (ptr == NULL)
+      return NULL;
+
   ptr = snmp_encode_object_identifier(ptr, end, name);
 
   va_start(args, type);
@@ -401,13 +415,19 @@ static u8 *snmp_encode_trap(u8 *ptr, u8 *end, const snmp_object_identifier *noti
   u16 *varbinds_size;
 
   /* Encode SNMPv2-Trap-PDU sequence */
+
   pdu_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SNMPV2_TRAP_PDU, &pdu_size);
+  if (ptr == NULL)
+    return NULL;
+
   ptr = snmp_encode_int(ptr, end, sequence_id++); /* sequence-id */
   ptr = snmp_encode_int(ptr, end, 0); /* error-status */
   ptr = snmp_encode_int(ptr, end, 0); /* error-index */
 
   /* Encode variable-bindings sequence */
   varbinds_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &varbinds_size);
+  if (ptr == NULL)
+    return NULL;
 
   /* sysUptime.0 */
   ptr = snmp_encode_varbind(ptr, end, sys_up_time, SNMP_TIME_TICKS, (u32)now);
@@ -486,6 +506,9 @@ static u8 *snmp_encode_snmpv2c_trap(u8 *ptr, u8 *end, const struct snmp_params *
 
   /* Encode message sequence */
   message_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &message_size);
+  if (ptr == NULL)
+    return NULL;
+
   ptr = snmp_encode_int(ptr, end, 1); /* version */
   ptr = snmp_encode_octet_string(ptr, end, params->community, -1); /* community */
 
@@ -497,8 +520,103 @@ static u8 *snmp_encode_snmpv2c_trap(u8 *ptr, u8 *end, const struct snmp_params *
   return ptr;
 }
 
+static u8 *snmp_encode_security_params_init(u8 *ptr, u8 *end, const struct snmp_params *params, u8 **pmsg_auth_params)
+{
+  if (ptr == NULL) {
+    return NULL;
+  }
+  else if (params->version == SNMP_VERSION_2C) {
+    return ptr;
+  }
+  else /*if (params->version == SNMP_VERSION_3)*/ {
+    /*
+      The security parameters of SNMPv3 USM follows the following syntax:
+
+      UsmSecurityParameters ::= SEQUENCE {
+        msgAuthoritativeEngineID OCTET STRING,
+        msgAuthoritativeEngineBoots INTEGER (0..2147483647),
+        msgAuthoritativeEngineTime INTEGER (0..2147483647),
+        msgUserName OCTET STRING (SIZE(0..32))
+        msgAuthenticationParameters OCTET STRING
+        msgPrivacyParameters OCTET STRING
+      }
+
+      The security parameters are serialize and stored within an OCTET STRING
+
+      With the usmHMACMD5AuthProtocol and usnNoPrivProtocol, the maximum size of the UsmSecurityParameters is:
+
+      SEQUENCE:                     4 octets (snmp_encode_sequence always allocate 16-bit size)
+      msgAuthoritativeEngineID:    34 octets (EngineID cannot exceed 32 octets)
+      msgAuthoritativeEngineBoots:  6 octets
+      msgAuthoritativeEngineTime:   6 octets
+      msgUserName:                 34 octets
+      msgAuthenticationParameters: 14 octets (msgAuthenticationParameters is either 0 or 12 octets)
+      msgPrivacyParameters:         2 octets (in this case, it is always empty)
+      --------------------------------------
+      Total:                      100 octets
+
+      This means that we can guaranetee that the size of msgSecurityParameters will not exceed 2 octets
+    */
+
+    u8 *security_params_begin;
+    u16 *security_params_size;
+    u8 *octet_string_size;
+    u8 *octet_string_begin;
+    static const u8 placeholder[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    /* Create OCTET STRING header */
+    if (ptr + 2 >= end)
+      return NULL;
+
+    *ptr++ = SNMP_OCTET_STRING;
+    octet_string_size = ptr;
+    octet_string_begin = ++ptr;
+
+    /* Encode UsmSecurityParameters sequence */
+
+    security_params_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &security_params_size);
+    if (ptr == NULL)
+      return NULL;
+
+    ptr = snmp_encode_octet_string(ptr, end, params->auth_engine_id, params->auth_engine_id_length); /* msgAuthoritativeEngineID */
+    ptr = snmp_encode_int(ptr, end, 0); /* msgAuthoritativeEngineBoots */
+    ptr = snmp_encode_int(ptr, end, 0); /* msgAuthoritativeEngineTime */
+    ptr = snmp_encode_octet_string(ptr, end, params->username, -1); /* msgUserName */
+
+    if (params->key_length != 0) {
+      *pmsg_auth_params = ptr + 2;
+      ptr = snmp_encode_octet_string(ptr, end, placeholder, 12); /* msgAuthenticationParameters */
+    }
+    else {
+      *pmsg_auth_params = NULL;
+      ptr = snmp_encode_octet_string(ptr, end, NULL, 0); /* msgAuthenticationParameters */
+    }
+    ptr = snmp_encode_octet_string(ptr, end, NULL, 0); /* msgPrivacyParameters */
+
+    *security_params_size = htons(ptr - security_params_begin);
+
+    /* End of UsmSecurityParameters sequence */
+
+    *octet_string_size = ptr - octet_string_begin;
+  }
+
+  return ptr;
+}
+
+static void snmp_encode_security_params_final(const u8 *ptr, const u8 *end, const struct snmp_params *params, u8 *msg_auth_params)
+{
+  unsigned char digest[16];
+
+  if (params->version != SNMP_VERSION_3 || params->username == NULL || params->key_length == 0)
+    return;
+
+  // HMAC-MD5-96
+  hmac_md5(ptr, end - ptr, params->key, sizeof(params->key), digest);
+  memcpy(msg_auth_params, digest, 12);
+}
+
 /* Encode SNMPv3 notification */
-static inline u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *params, const snmp_object_identifier *notification, va_list args)
+static u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_params *params, const snmp_object_identifier *notification, va_list args)
 {
   /*
      The SNMPv3 message follows the following syntax:
@@ -512,7 +630,7 @@ static inline u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_pa
 
      HeaderData ::= SEQUENCE {
        msgID INTEGER (0..2147483647),
-       msgMagSize INTEGER (484..2147483647),
+       msgMaxSize INTEGER (484..2147483647),
        msgFlags OCTET STRING (SIZE(1)),
        msgSecurityModel INTEGER(1..2147483647)
      }
@@ -530,8 +648,71 @@ static inline u8 *snmp_encode_snmpv3_trap(u8 *ptr, u8 *end, const struct snmp_pa
 
      See RFC 3412 for more details
   */
+  u8 *message_begin;
+  u16 *message_size;
 
-  return NULL;
+  u8 *global_data_begin;
+  u16 *global_data_size;
+
+  u8 *scoped_pdu_begin;
+  u16 *scoped_pdu_size;
+
+  u8 *msg_auth_params;
+
+  u8 msg_flags;
+
+  /* Encode SNMPv3Message sequence */
+  message_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &message_size);
+  if (ptr == NULL)
+    return NULL;
+
+  ptr = snmp_encode_int(ptr, end, 3); /* msgVersion */
+
+  /* Encode msgGlobalData sequence */
+
+  global_data_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &global_data_size);
+  if (ptr == NULL)
+    return NULL;
+
+  ptr = snmp_encode_int(ptr, end, 0); /* msgID */
+  ptr = snmp_encode_int(ptr, end, SNMP_MAX_PAYLOAD); /* msgMaxSize */
+
+  if (params->key_length != 0)
+    msg_flags = 0x01; // authNoPriv
+  else
+    msg_flags = 0x00; // noAuthNoPriv
+  ptr = snmp_encode_octet_string(ptr, end, &msg_flags, 1); /* msgFlags */
+
+  ptr = snmp_encode_int(ptr, end, SNMP_USM_SECURITY_MODEL); /* msgSecurityModel */
+
+  *global_data_size = htons(ptr - global_data_begin);
+
+  /* End of msgGlobalData sequence */
+
+  ptr = snmp_encode_security_params_init(ptr, end, params, &msg_auth_params); /* msgSecurityParameters */
+  if (ptr == NULL)
+    return NULL;
+
+  /* Encode msgData sequence */
+
+  scoped_pdu_begin = ptr = snmp_encode_sequence(ptr, end, SNMP_SEQUENCE, &scoped_pdu_size);
+  if (ptr == NULL)
+    return NULL;
+
+  ptr = snmp_encode_octet_string(ptr, end, params->context_engine_id, 12); /* contextEngineID */
+  ptr = snmp_encode_octet_string(ptr, end, params->context_name, -1); /* contextName */
+  ptr = snmp_encode_trap(ptr, end, notification, args); /* data */
+  *scoped_pdu_size = htons(ptr - scoped_pdu_begin);
+
+  /* End of msgData sequence */
+
+  *message_size = htons(ptr - message_begin);
+
+  /* End of SNMPv3Message sequence */
+
+  snmp_encode_security_params_final(message_begin, ptr, params, msg_auth_params); /* Update password if any */
+
+  return ptr;
 }
 
 /* Encode a SNMP notification
@@ -541,12 +722,15 @@ unsigned int snmp_encode_notificationv(void *buffer, unsigned int buffer_size, c
 {
   u8 *begin = (u8 *)buffer;
   u8 *end = begin + buffer_size;
-  u8 *ptr;
+  u8 *ptr = begin;
 
   if (params->version == SNMP_VERSION_2C)
     ptr = snmp_encode_snmpv2c_trap(ptr, end, params, notification, args);
   else /* if (params->version == SNMP_VERSION_3) */
     ptr = snmp_encode_snmpv3_trap(ptr, end, params, notification, args);
+
+  if (ptr == NULL)
+    return 0;
 
   return ptr - begin;
 }

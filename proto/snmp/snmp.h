@@ -25,14 +25,17 @@ struct snmp_params
 {
   enum snmp_version version;
   /* SNMPv2c parameters */
-  char *community;
+  const char *community;
   /* SNMPv3 USM parameters */
-  u8 engine_id[12];
-  int has_engine_id;
-  char *username;
-  char *password;
-  u8 key[12];
-  int has_key;
+  u8 context_engine_id[32];
+  int context_engine_id_length;
+  const char *context_name;
+  u8 auth_engine_id[32];
+  int auth_engine_id_length;
+  const char *username;
+  const char *password;
+  u8 key[16];
+  int key_length;
 };
 
 struct snmp_destination
@@ -49,15 +52,17 @@ struct snmp_config
   struct snmp_params def_params;
 };
 
+#ifdef IPV6
+#define SNMP_MAX_PAYLOAD  1232 /* See RFC 2460, p. 25 */
+#else /* IPV6 */
+#define SNMP_MAX_PAYLOAD 512 /* See RFC 791, p. 13 */
+#endif /* IPV6 */
+
 struct snmp_payload
 {
   node n;
   ip_addr addr;
-#ifdef IPV6
-  unsigned char data[1232]; /* See RFC 2460, p. 25 */
-#else /* IPV6 */
-  unsigned char data[512]; /* See RFC 791, p. 13 */
-#endif /* IPV6 */
+  unsigned char data[SNMP_MAX_PAYLOAD];
   unsigned int size;
 };
 

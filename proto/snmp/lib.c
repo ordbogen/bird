@@ -25,26 +25,26 @@ void snmp_encode_password(struct snmp_params *params)
 
   MD5Init(&ctx);
   MD5Update(&ctx, digest, 16);
-  MD5Update(&ctx, params->engine_id, 12);
+  MD5Update(&ctx, params->auth_engine_id, 12);
   MD5Update(&ctx, digest, 16);
-  MD5Final(digest, &ctx);
+  MD5Final(params->key, &ctx);
 
-  memcpy(params->key, digest, 12);
-  params->has_key = 1;
+  params->key_length = 16;
 }
 
-int snmp_parse_key_or_engine_id(const char *string, u8 *buffer)
+int snmp_parse_hex(const char *string, int max_size, u8 *buffer)
 {
   int i;
-  for (i = 0; i != 12 && *string != 0; ++i, string += 2) {
+  for (i = 0; i != max_size && *string != 0; ++i, string += 2) {
     unsigned int val;
     if (sscanf(string, "%02x", &val) == 1)
       *buffer++ = val;
     else
       return 0;
   }
-  if (*string == 0 && i == 12)
-    return 1;
-  else
+
+  if (i == max_size && *string != 0)
     return 0;
+  else
+    return i;
 }
