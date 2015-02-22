@@ -32,3 +32,4 @@ event.h
 checksum.c
 checksum.h
 alloca.h
+hmac.c
