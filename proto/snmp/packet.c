@@ -286,7 +286,7 @@ static u8 *snmp_encode_ip_address(u8 *ptr, u8 *end, const ip_addr *ip)
 #ifdef IPV6
   *(u32 *)ptr = 0;
 #else /* IPV6 */
-  *(u32 *)ptr = htonl(_I(*ip));
+  *(u32 *)ptr = htonl(ipa_to_u32(*ip));
 #endif /* IPV6 */
 
   ptr += 4;
