@@ -145,30 +145,15 @@ void snmp_enqueue_notificationv(struct snmp_proto *snmp, const snmp_object_ident
   const struct snmp_config *cfg = (const struct snmp_config *)snmp->p.cf;
   const struct snmp_destination *dest;
   int need_schedule = 0;
-  const struct snmp_payload *default_payload = NULL;
 
   WALK_LIST(dest, cfg->destinations) {
     struct snmp_payload *payload = (struct snmp_payload *)sl_alloc(snmp->payload_slab);
 
-    if (dest->community == NULL && default_payload != NULL) {
-      /* We are using default community, so the packets are identical */
-      payload->size = default_payload->size;
-      memcpy(payload->data, default_payload->data, default_payload->size);
-    }
-    else {
-      /* We are using non-default community or this is the first destination */
-      const char *community = (dest->community == NULL ? cfg->community : dest->community);
-
-      payload->size = snmp_encode_notificationv(payload->data, sizeof(payload->data), community, notification, args);
-      if (payload->size == 0) {
-        log(L_WARN "%s: Notification exceeded buffer limits", snmp->p.name);
-        sl_free(snmp->payload_slab, payload);
-        continue;
-      }
-
-      /* Set us as default packet if default community */
-      if (dest->community == NULL)
-        default_payload = payload;
+    payload->size = snmp_encode_notificationv(payload->data, sizeof(payload->data), &dest->params, notification, args);
+    if (payload->size == 0) {
+      log(L_WARN "%s: Notification exceeded buffer limits", snmp->p.name);
+      sl_free(snmp->payload_slab, payload);
+      continue;
     }
 
     payload->addr = dest->addr;

@@ -14,18 +14,39 @@
 #include "lib/event.h"
 #include "lib/socket.h"
 
+enum snmp_version
+{
+  SNMP_VERSION_DEFAULT,
+  SNMP_VERSION_2C,
+  SNMP_VERSION_3
+};
+
+struct snmp_params
+{
+  enum snmp_version version;
+  /* SNMPv2c parameters */
+  char *community;
+  /* SNMPv3 USM parameters */
+  u8 engine_id[12];
+  int has_engine_id;
+  char *username;
+  char *password;
+  u8 key[12];
+  int has_key;
+};
+
 struct snmp_destination
 {
   node n;
   ip_addr addr;
-  char *community;
+  struct snmp_params params;
 };
 
 struct snmp_config
 {
   struct proto_config c;
   list destinations;
-  char *community;
+  struct snmp_params def_params;
 };
 
 struct snmp_payload
@@ -60,7 +81,7 @@ void snmp_enqueue_notificationv(
 unsigned int snmp_encode_notificationv(
     void *buffer,
     unsigned int buffer_size,
-    const char *community,
+    const struct snmp_params *params,
     const snmp_object_identifier *notification,
     va_list args);
 
