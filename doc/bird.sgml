@@ -1924,6 +1924,16 @@ using the following configuration parameters:
 	protocol itself (for example, if a route is received through eBGP and
 	therefore does not have such attribute). Default: 100 (0 in pre-1.2.0
 	versions of BIRD).
+
+	<tag>snmp notifications <m/switch/</tag>
+	Enable transmission of SNMP notifications when the BGP session changes
+	state. Notifications follow BGP4-MIB (RFC
+	4273<htmlurl url="ftp://ftp.rfc-editor.org/in-notes/rfc4273.txt">) for
+	IPv4 and BGP4-V2-MIB-JUNIPER<htmlurl
+	url="http://www.juniper.net/techpubs/en_US/junos12.1/topics/reference/mibs/mib-jnx-bgpmib2.txt">
+	for IPv6. Note that SNMP protocol also has to be
+	configured. See <ref id="sect-snmp" name="SNMP"> section for details.
+	Default: disabled.
 </descrip>
 
 <sect1>Attributes
@@ -3293,6 +3303,90 @@ protocol rip MyRIP_test {
 }
 </code>
 
+<sect><label id="sect-snmp">SNMP
+
+<sect1>Introdution
+
+<p>Simple Network Management Protocol (SNMP) is not a routing protocol, but a
+management protocol. While the protocol serves as a standardized way of
+configuring and polling, BIRD currently only implements one small part of the
+protocol, namely notifications. SNMP notifications delivers a standard way of
+notifying one or more recipient of important events in almost all standard
+routing protocols. BIRD currently only supports SNMP notifications in BGP.
+
+<p>BIRD implements SNMPv2c and SNMPv3 USM notifications as defined in
+RFC 1901<htmlurl url="ftp://ftp.rfc-editor.org/in-notes/rfc1901.txt">,
+RFC 3411<htmlurl url="ftp://ftp.rfc-editor.org/in-notes/rfc3411.txt">,
+RFC 3412<htmlurl url="ftp://ftp.rfc-editor.org/in-notes/rfc3412.txt">,
+RFC 3414<htmlurl url="ftp://ftp.rfc-editor.org/in-notes/rfc3414.txt">,
+RFC 3416<htmlurl url="ftp://ftp.rfc-editor.org/in-notes/rfc3416.txt">, and
+RFC 3417<htmlurl url="ftp://ftp.rfc-editor.org/in-notes/rfc3417.txt">
+
+<sect1>Configuration
+
+<p>It is currently only possible to have one SNMP instance configured, but it
+can be set up with multiple destinations, with different configurations.
+
+<code>
+protocol snmp [&lt;name&gt;] {
+	version v2c|v3;
+	community &lt;text&gt;;
+	context engine id &lt;hex&gt;;
+	context name &lt;text&gt;;
+	auth engine id &lt;hex&gt;
+	username &lt;text&gt;;
+	password md5 &lt;text&gt;;
+	key md5 &lt;hex&gt;;
+	destination &lt;ip&gt; [ {
+		version v2c|v3;
+		community &lt;text&gt;;
+		context engine id &lt;hex&gt;;
+		context name &lt;text&gt;;
+		auth engine id &lt;hex&gt;
+		username &lt;text&gt;;
+		password md5 &lt;text&gt;;
+		key md5 &lt;hex&gt;;
+	} ];
+}
+</code>
+
+<descrip>
+	<tag>description <m/ip/ [ { <m/options/ }</tag>
+	Specifies a notification recipient. Each recipient can have its own settings,
+	or it can inherit from the global snmp settings.
+
+	<tag>version v2c|v3</tag>
+	This options determines the SNMP version to use. SNMPv2c is not recommended by
+	the IETF, due to its lack of security, but it does offer a more lighter payload
+	than SNMPv3 USM. Default: v2c.
+
+	<tag>community <m/text/</tag>
+	When using SNMPv2c, the context of the data is determined by a community name.
+	Default: public
+
+	<tag>context engine id <m/hex/</tag>
+	When using SNMPv3, the context of the data is determined by a context engine id
+	and a context name. The context engine id is a hexadecimal value which follows
+	a certain syntax. The default context engine id is 800063fb0442495244, which
+	essentially translates into the string "BIRD" with the enterprise id of CZ.NIC.
+	For more information about engine id formats, see SNMP-FRAMEWORK-MIB or
+	RFC 3411<htmlurl url="ftp://ftp.rfc-editor.org/in-notes/rfc3411.txt">.
+
+	<tag>context name <m/text/</tag>
+	When using SNMPv3, the context of the data is determined by a context engine id
+	and a context name. Default: <m/empty/
+
+	<tag>username <m/text/</tag>
+	Username, when using SNMPv3 USM. Default: <m/empty/
+
+	<tag>password md5 <m/text/</tag>
+	Password, when using SNMPv3 USM. Default: <m/none/
+
+	<tag>key md5 <m/text/</tag>
+	Instead of specifying a password for SNMPv3 USM, you can also specify a raw
+	key. The key must be exactly 12 octets long (24 hexadecimal digits). Default:
+	<m/none/
+</descrip>
 
 <sect>Static
 
