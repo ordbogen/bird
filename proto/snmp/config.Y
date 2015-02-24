@@ -23,7 +23,7 @@ CF_DECLS
 
 CF_KEYWORDS(SNMP, ADDRESS, DESTINATION, VERSION, V2C, V3)
 CF_KEYWORDS(COMMUNITY)
-CF_KEYWORDS(CONTEXT, AUTH, ENGINE, ID, NAME, USERNAME, PASSWORD, KEY)
+CF_KEYWORDS(CONTEXT, AUTH, ENGINE, ID, NAME, USERNAME, PASSWORD, KEY, MD5)
 
 CF_GRAMMAR
 
@@ -72,8 +72,8 @@ snmp_config_item:
  | CONTEXT NAME text { this_params->context_name = $3; }
  | AUTH ENGINE ID text { if ((this_params->auth_engine_id_length = snmp_parse_hex($4, 32, this_params->auth_engine_id)) == 0) cf_error("Invalid engine id"); }
  | USERNAME text { this_params->username = $2; }
- | PASSWORD text { this_params->password = $2; }
- | KEY text { if ((this_params->key_length = snmp_parse_hex($2, 16, this_params->key)) != 16) cf_error("Invalid key"); }
+ | PASSWORD MD5 text { this_params->password = $3; }
+ | KEY MD5 text { if ((this_params->key_length = snmp_parse_hex($3, 16, this_params->key)) != 16) cf_error("Invalid key"); }
  ;
 
 snmp_destination_opts:
