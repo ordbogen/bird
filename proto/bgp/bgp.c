@@ -369,7 +369,7 @@ static unsigned int snmp_connection_states[BS_MAX] = {
 };
 
 static void
-bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
+bgp_send_notification(struct bgp_conn *conn)
 {
 #ifdef IPV6
 
@@ -429,9 +429,6 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
   const u8 *ptr;
   u8 error[2];
 
-  if (!cfg->snmp)
-    return;
-
   for (i = 0, ptr = (const u8 *)&bgp->source_addr; i != 16; ++i, ++ptr) {
     jnx_bgp_m2_peer_local_addr_type[16 + i] = *ptr;
     jnx_bgp_m2_peer_local_addr[16 + i] = *ptr;
@@ -455,7 +452,7 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
   error[0] = bgp->last_error_class;
   error[1] = bgp->last_error_code;
 
-  if (state == BGP_SNMP_STATE_ESTABLISHED) {
+  if (conn->state == BGP_SNMP_STATE_ESTABLISHED) {
     snmp_send_notification(
         jnx_bgp_m2_established,
         jnx_bgp_m2_peer_local_addr_type, SNMP_INTEGER, 2,
@@ -463,7 +460,7 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
         jnx_bgp_m2_peer_remote_addr_type, SNMP_INTEGER, 2,
         jnx_bgp_m2_peer_remote_addr, SNMP_OCTET_STRING, &cfg->remote_ip, 16,
         jnx_bgp_m2_peer_last_error_received, SNMP_OCTET_STRING, error, 2,
-        jnx_bgp_m2_peer_state, SNMP_INTEGER, state,
+        jnx_bgp_m2_peer_state, SNMP_INTEGER, BGP_SNMP_STATE_ESTABLISHED,
         NULL);
   }
   else {
@@ -475,7 +472,7 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
         jnx_bgp_m2_peer_remote_addr, SNMP_OCTET_STRING, &cfg->remote_ip, 16,
         jnx_bgp_m2_peer_last_error_received, SNMP_OCTET_STRING, error, 2,
         jnx_bgp_m2_peer_last_error_received_text, SNMP_OCTET_STRING, bgp_last_errmsg(bgp), -1,
-        jnx_bgp_m2_peer_state, SNMP_INTEGER, state,
+        jnx_bgp_m2_peer_state, SNMP_INTEGER, snmp_connection_states[conn->state],
         NULL);
   }
 
@@ -512,9 +509,6 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
 
   u32 remote_ip = htonl(ipa_to_u32(cfg->remote_ip));
 
-  if (!cfg->snmp)
-    return;
-
   for (i = 0, ptr = (const u8 *)&remote_ip; i != 4; ++i, ++ptr) {
     bgp_peer_remote_addr[11 + i] = *ptr;
     bgp_peer_last_error[11 + i] = *ptr;
@@ -525,10 +519,10 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
   error[1] = bgp->last_error_code;
 
   snmp_send_notification(
-    (state == BGP_SNMP_STATE_ESTABLISHED ? bgp_established_notification : bgp_backward_trans_notification),
+    (conn->state == BS_ESTABLISHED ? bgp_established_notification : bgp_backward_trans_notification),
     bgp_peer_remote_addr, SNMP_IP_ADDRESS, &cfg->remote_ip,
     bgp_peer_last_error, SNMP_OCTET_STRING, error, 2,
-    bgp_peer_state, SNMP_INTEGER, state,
+    bgp_peer_state, SNMP_INTEGER, snmp_connection_states[conn->state],
     NULL
   );
 
@@ -539,18 +533,19 @@ bgp_send_notification(struct bgp_conn *conn, enum bgp_snmp_state state)
 static inline void
 bgp_conn_set_state(struct bgp_conn *conn, unsigned new_state)
 {
-  enum bgp_snmp_state old_snmp_state = snmp_connection_states[conn->state];
-  enum bgp_snmp_state new_snmp_state = snmp_connection_states[new_state];
+  unsigned int old_state = conn->state;
 
   if (conn->bgp->p.mrtdump & MD_STATES)
     mrt_dump_bgp_state_change(conn, conn->state, new_state);
 
   conn->state = new_state;
 
-  if (old_snmp_state > new_snmp_state)
-    bgp_send_notification(conn, new_snmp_state);
-  else if (old_snmp_state != BGP_SNMP_STATE_ESTABLISHED && new_snmp_state == BGP_SNMP_STATE_ESTABLISHED)
-    bgp_send_notification(conn, new_snmp_state);
+  if ((old_state == BS_ESTABLISHED || new_state == BS_ESTABLISHED) && conn->bgp->cf->snmp) {
+    if (old_state == BS_ESTABLISHED && new_state != BS_ESTABLISHED)
+      bgp_send_notification(conn);
+    else if (old_state != BS_ESTABLISHED && new_state == BS_ESTABLISHED)
+      bgp_send_notification(conn);
+  }
 }
 
 void
