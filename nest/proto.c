@@ -916,6 +916,9 @@ protos_build(void)
 #ifdef CONFIG_BGP
   proto_build(&proto_bgp);
 #endif
+#ifdef CONFIG_SNMP
+  proto_build(&proto_snmp);
+#endif
 #ifdef CONFIG_BFD
   proto_build(&proto_bfd);
   bfd_init_all();
