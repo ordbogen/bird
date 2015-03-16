@@ -6,10 +6,20 @@
 
 #include "snmp.h"
 
-struct snmp_cfg *snmp_cf = NULL; /* Configuration singleton */
+struct snmp_cfg *snmp_cf; /* Configuration singleton */
 struct snmp_proto *snmp_instance = NULL; /* Instance singleton */
 
 static void snmp_flush_queue(struct snmp_proto *snmp);
+
+static void snmp_preconfig(struct protocol *p UNUSED, struct config *c UNUSED)
+{
+  snmp_cf = NULL;
+}
+
+static void snmp_copy_config(struct proto_config *dst, struct proto_config *src)
+{
+  proto_copy_rest(dst, src, sizeof(struct snmp_config));
+}
 
 /* Triggered when a blocking transmit has completed */
 static void snmp_tx_hook(sock *socket)
@@ -175,7 +185,9 @@ void snmp_enqueue_notificationv(struct snmp_proto *snmp, const snmp_object_ident
 struct protocol proto_snmp = {
   .name =           "SNMP",
   .template =       "snmp%d",
+  .preconfig =      snmp_preconfig,
   .init =           snmp_init,
   .start =          snmp_start,
   .shutdown =       snmp_shutdown,
+  .copy_config =    snmp_copy_config,
 };
