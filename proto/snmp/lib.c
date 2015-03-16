@@ -17,7 +17,7 @@ void snmp_encode_password(struct snmp_params *params)
     if (len + chunkSize > 1048576)
       chunkSize = 1048576 - len;
 
-    MD5Update(&ctx, params->password, chunkSize);
+    MD5Update(&ctx, (const unsigned char *)params->password, chunkSize);
 
     len += chunkSize;
   }
