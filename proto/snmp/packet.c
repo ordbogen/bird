@@ -524,6 +524,7 @@ static u8 *snmp_encode_security_params_init(u8 *ptr, u8 *end, const struct snmp_
     return NULL;
   }
   else if (params->version == SNMP_VERSION_2C) {
+    *pmsg_auth_params = NULL;
     return ptr;
   }
   else /*if (params->version == SNMP_VERSION_3)*/ {
