@@ -26,11 +26,11 @@ typedef int snmp_object_identifier;
 
 #ifdef CONFIG_SNMP
 
-static inline void snmp_send_notification(const snmp_object_identifier *notification, ...) { }
+void snmp_send_notification(const snmp_object_identifier *notification, ...);
 
 #else /* CONFIG_SNMP */
 
-void snmp_send_notification(const snmp_object_identifier *notification, ...);
+static inline void snmp_send_notification(const snmp_object_identifier *notification, ...) { }
 
 #endif /* CONFIG_SNMP */
 
